@@ -19,7 +19,7 @@ describe('<CompositeList />', () => {
         current: [] as Array<string | null>,
       };
       const { unmount } = await render(
-        <CompositeList elementsRef={elementsRef} labelsRef={labelsRef}>
+        <CompositeList listRef={{ current: null }} elementsRef={elementsRef} labelsRef={labelsRef}>
           <Item />
           <Item />
           <Item />
@@ -48,7 +48,7 @@ describe('<CompositeList />', () => {
       };
 
       await render(
-        <CompositeList elementsRef={elementsRef} labelsRef={labelsRef}>
+        <CompositeList listRef={{ current: null }} elementsRef={elementsRef} labelsRef={labelsRef}>
           <Item index={2} />
           <Item index={0} />
         </CompositeList>,
@@ -76,7 +76,7 @@ describe('<CompositeList />', () => {
         'More info: https://fb.me/react-controlled-components';
 
       await render(
-        <CompositeList elementsRef={{ current: [] }}>
+        <CompositeList listRef={{ current: null }} elementsRef={{ current: [] }}>
           <Item index={0} />
           <Item />
         </CompositeList>,
@@ -85,7 +85,7 @@ describe('<CompositeList />', () => {
       expect(console.error).toHaveBeenCalledWith(expectedMessage);
 
       await render(
-        <CompositeList elementsRef={{ current: [] }}>
+        <CompositeList listRef={{ current: null }} elementsRef={{ current: [] }}>
           <Item />
           <Item index={1} />
         </CompositeList>,

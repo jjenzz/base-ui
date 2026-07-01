@@ -25,7 +25,7 @@ export function CompositeItem<Metadata, State extends Record<string, any>>(
     ...elementProps
   } = componentProps;
 
-  const { compositeProps, compositeRef } = useCompositeItem({ metadata });
+  const { compositeProps, compositeRef, index } = useCompositeItem({ metadata });
 
   return useRenderElement(tag, componentProps, {
     state,

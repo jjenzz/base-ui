@@ -12,7 +12,7 @@ import { type CompositeMetadata, CompositeListContext } from './CompositeListCon
  * @internal
  */
 export function CompositeList<Metadata>(props: CompositeList.Props<Metadata>) {
-  const { children, elementsRef, labelsRef, onMapChange: onMapChangeProp } = props;
+  const { children, listRef, elementsRef, labelsRef, onMapChange: onMapChangeProp } = props;
 
   const onMapChange = useStableCallback(onMapChangeProp);
 
@@ -90,6 +90,7 @@ export function CompositeList<Metadata>(props: CompositeList.Props<Metadata>) {
   });
 
   useIsoLayoutEffect(() => {
+    const list = listRef?.current;
     const isControlled = controlledRef.current === true;
     const sortedMap = sortedMapRef.current;
     if (isControlled || typeof MutationObserver !== 'function' || sortedMap.size === 0) {
@@ -103,16 +104,21 @@ export function CompositeList<Metadata>(props: CompositeList.Props<Metadata>) {
         entry.removedNodes.forEach(updateDiff);
         entry.addedNodes.forEach(updateDiff);
       });
+
       if (diff.size === 0) {
         flush();
       }
     });
 
-    sortedMap.forEach((_, node) => {
-      if (node.parentElement) {
-        mutationObserver.observe(node.parentElement, { childList: true });
-      }
-    });
+    if (list) {
+      mutationObserver.observe(list, { childList: true, subtree: true });
+    } else {
+      sortedMap.forEach((_, node) => {
+        if (node.parentElement) {
+          mutationObserver.observe(node.parentElement, { childList: true });
+        }
+      });
+    }
 
     return () => {
       mutationObserver.disconnect();
@@ -211,6 +217,11 @@ export interface CompositeListState {}
 
 export interface CompositeListProps<Metadata> {
   children: React.ReactNode;
+  /**
+   * A ref to the composite list container to listen for reorder mutations.
+   * If this is not passed, it will observe each item's parent.
+   */
+  listRef: React.RefObject<HTMLElement | null> | null;
   /**
    * A ref to the list of HTML elements, ordered by their index.
    * `useListNavigation`'s `listRef` prop.
