@@ -359,9 +359,9 @@ export function AriaCombobox<Value = any, Mode extends SelectionMode = 'none', I
     [items],
   );
 
-  const filteredItems: Item[] | Group<Item>[] = React.useMemo(() => {
+  const filteredItems: readonly Item[] | readonly Group<Item>[] = React.useMemo(() => {
     if (filteredItemsProp && !shouldIgnoreExternalFiltering) {
-      return filteredItemsProp as Item[] | Group<Item>[];
+      return filteredItemsProp;
     }
 
     if (!items) {
@@ -1908,13 +1908,13 @@ export type AriaComboboxProps<
   /**
    * The selected value of the combobox. Use when controlled.
    */
-  selectedValue?: ComboboxItemValueType<Value, Mode> | undefined;
+  selectedValue?: Readonly<ComboboxItemValueType<Value, Mode>> | undefined;
   /**
    * The uncontrolled selected value of the combobox when it's initially rendered.
    *
    * To render a controlled combobox, use the `selectedValue` prop instead.
    */
-  defaultSelectedValue?: ComboboxItemValueType<Value, Mode> | null | undefined;
+  defaultSelectedValue?: Readonly<ComboboxItemValueType<Value, Mode>> | null | undefined;
   /**
    * Callback fired when the selected value of the combobox changes.
    */

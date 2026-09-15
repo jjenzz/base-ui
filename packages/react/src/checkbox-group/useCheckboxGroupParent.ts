@@ -4,6 +4,7 @@ import { useStableCallback } from '@base-ui/utils/useStableCallback';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
 import type { BaseUIChangeEventDetails } from '../internals/createBaseUIEventDetails';
 import type { BaseUIEventReasons } from '../internals/reasons';
+import type { CheckboxGroupValue, MutableCheckboxGroupValue } from './CheckboxGroup';
 
 export function useCheckboxGroupParent(
   params: UseCheckboxGroupParentParameters,
@@ -86,7 +87,7 @@ export function useCheckboxGroupParent(
         }
 
         let nextStatus: 'on' | 'off' | 'mixed' = 'mixed';
-        let nextValue = uncontrolledState;
+        let nextValue = uncontrolledState.slice();
 
         if (status === 'mixed') {
           nextStatus = 'on';
@@ -140,11 +141,11 @@ export function useCheckboxGroupParent(
 }
 
 export interface UseCheckboxGroupParentParameters {
-  allValues?: string[] | undefined;
-  value: string[];
+  allValues?: CheckboxGroupValue | undefined;
+  value: CheckboxGroupValue;
   onValueChange?:
     | ((
-        value: string[],
+        value: MutableCheckboxGroupValue,
         eventDetails: BaseUIChangeEventDetails<BaseUIEventReasons['none']>,
       ) => void)
     | undefined;

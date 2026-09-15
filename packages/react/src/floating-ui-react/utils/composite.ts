@@ -384,7 +384,7 @@ export function getGridNavigatedIndex(
 }
 
 /** For each cell index, gets the item index that occupies that cell */
-export function createGridCellMap(sizes: Dimensions[], cols: number, dense: boolean) {
+export function createGridCellMap(sizes: readonly Dimensions[], cols: number, dense: boolean) {
   const cellMap: (number | undefined)[] = [];
   let startIndex = 0;
   sizes.forEach(({ width, height }, index) => {
@@ -429,8 +429,8 @@ export function createGridCellMap(sizes: Dimensions[], cols: number, dense: bool
 /** Gets cell index of an item's corner or -1 when index is -1. */
 export function getGridCellIndexOfCorner(
   index: number,
-  sizes: Dimensions[],
-  cellMap: (number | undefined)[],
+  sizes: readonly Dimensions[],
+  cellMap: readonly (number | undefined)[],
   cols: number,
   corner: 'tl' | 'tr' | 'bl' | 'br',
 ) {
@@ -463,8 +463,8 @@ export function getGridCellIndexOfCorner(
 
 /** Gets all cell indices that correspond to the specified indices */
 export function getGridCellIndices(
-  indices: (number | undefined)[],
-  cellMap: (number | undefined)[],
+  indices: readonly (number | undefined)[],
+  cellMap: readonly (number | undefined)[],
 ) {
   return cellMap.flatMap((index, cellIndex) => (indices.includes(index) ? [cellIndex] : []));
 }

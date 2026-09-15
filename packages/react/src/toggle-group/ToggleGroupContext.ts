@@ -2,9 +2,10 @@
 import * as React from 'react';
 import type { BaseUIChangeEventDetails } from '../internals/createBaseUIEventDetails';
 import type { BaseUIEventReasons } from '../internals/reasons';
+import type { ToggleGroupValue } from './ToggleGroup';
 
-export interface ToggleGroupContext<Value> {
-  value: readonly Value[];
+export interface ToggleGroupContext<Value extends string> {
+  value: ToggleGroupValue<Value>;
   setGroupValue: (
     newValue: Value,
     nextPressed: boolean,
@@ -22,6 +23,6 @@ export const ToggleGroupContext = React.createContext<ToggleGroupContext<any> | 
   undefined,
 );
 
-export function useToggleGroupContext<Value>() {
+export function useToggleGroupContext<Value extends string>() {
   return React.useContext<ToggleGroupContext<Value> | undefined>(ToggleGroupContext);
 }

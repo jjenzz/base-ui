@@ -102,7 +102,7 @@ export function mergeProps(a: any, b: any, c?: any, d?: any, e?: any) {
  * @see mergeProps
  * @public
  */
-export function mergePropsN<T extends ElementType>(props: InputProps<T>[]): PropsOf<T> {
+export function mergePropsN<T extends ElementType>(props: readonly InputProps<T>[]): PropsOf<T> {
   if (props.length === 0) {
     return EMPTY_PROPS as PropsOf<T>;
   }

@@ -9,7 +9,7 @@ type Cleanup = () => void;
 type ForkRef<I> = {
   callback: React.RefCallback<I> | null;
   cleanup: Cleanup | null;
-  refs: InputRef<I>[];
+  refs: readonly InputRef<I>[];
 };
 
 /**
@@ -45,7 +45,7 @@ export function useMergedRefs<I>(
  *
  * If you need to merge a fixed number (up to four) of refs, use `useMergedRefs` instead for better performance.
  */
-export function useMergedRefsN<I>(refs: InputRef<I>[]): Result<I> {
+export function useMergedRefsN<I>(refs: readonly InputRef<I>[]): Result<I> {
   const forkRef = useRefWithInit(createForkRef<I>).current;
   if (didChangeN(forkRef, refs)) {
     update(forkRef, refs);
@@ -77,14 +77,14 @@ function didChange<I>(
   )
 }
 
-function didChangeN<I>(forkRef: ForkRef<I>, newRefs: InputRef<I>[]) {
+function didChangeN<I>(forkRef: ForkRef<I>, newRefs: readonly InputRef<I>[]) {
   return (
     forkRef.refs.length !== newRefs.length ||
     forkRef.refs.some((ref, index) => ref !== newRefs[index])
   );
 }
 
-function update<I>(forkRef: ForkRef<I>, refs: InputRef<I>[]) {
+function update<I>(forkRef: ForkRef<I>, refs: readonly InputRef<I>[]) {
   forkRef.refs = refs;
 
   if (refs.every((ref) => ref == null)) {

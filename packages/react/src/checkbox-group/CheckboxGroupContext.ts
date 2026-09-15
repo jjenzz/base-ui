@@ -5,14 +5,15 @@ import type { UseCheckboxGroupParentReturnValue } from './useCheckboxGroupParent
 import type { BaseUIChangeEventDetails } from '../internals/createBaseUIEventDetails';
 import type { BaseUIEventReasons } from '../internals/reasons';
 import type { LabelableContext } from '../internals/labelable-provider/LabelableContext';
+import type { CheckboxGroupValue } from './CheckboxGroup';
 
 export interface CheckboxGroupContext {
-  value: string[];
+  value: CheckboxGroupValue;
   setValue: (
-    value: string[],
+    value: CheckboxGroupValue,
     eventDetails: BaseUIChangeEventDetails<BaseUIEventReasons['none']>,
   ) => void;
-  allValues: string[] | undefined;
+  allValues: CheckboxGroupValue | undefined;
   parent: UseCheckboxGroupParentReturnValue;
   disabled: boolean;
   validation: UseFieldValidationReturnValue;

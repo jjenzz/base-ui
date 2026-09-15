@@ -67,8 +67,8 @@ export const CheckboxGroup = React.forwardRef(function CheckboxGroup(
   });
 
   const setValue = useStableCallback(
-    (v: string[], eventDetails: CheckboxGroup.ChangeEventDetails) => {
-      onValueChange?.(v, eventDetails);
+    (v: CheckboxGroupValue, eventDetails: CheckboxGroup.ChangeEventDetails) => {
+      onValueChange?.(v.slice(), eventDetails);
 
       if (eventDetails.isCanceled) {
         return;
@@ -132,7 +132,7 @@ export const CheckboxGroup = React.forwardRef(function CheckboxGroup(
     }
 
     const initialValue = Array.isArray(validityData.initialValue)
-      ? (validityData.initialValue as readonly string[])
+      ? (validityData.initialValue as CheckboxGroupValue)
       : EMPTY_ARRAY;
 
     setDirty(!areArraysEqual(value, initialValue));
@@ -185,29 +185,33 @@ export interface CheckboxGroupState extends FieldRootState {
   disabled: boolean;
 }
 
+export type CheckboxGroupValue = readonly string[];
+export type MutableCheckboxGroupValue = string[];
+
 export interface CheckboxGroupProps extends BaseUIComponentProps<'div', CheckboxGroupState> {
   /**
    * Names of the checkboxes in the group that should be ticked.
    *
    * To render an uncontrolled checkbox group, use the `defaultValue` prop instead.
    */
-  value?: string[] | undefined;
+  value?: CheckboxGroupValue | undefined;
   /**
    * Names of the checkboxes in the group that should be initially ticked.
    *
    * To render a controlled checkbox group, use the `value` prop instead.
    */
-  defaultValue?: string[] | undefined;
+  defaultValue?: CheckboxGroupValue | undefined;
   /**
    * Event handler called when a checkbox in the group is ticked or unticked.
    * Provides the new value as an argument.
    */
   onValueChange?:
-    ((value: string[], eventDetails: CheckboxGroupChangeEventDetails) => void) | undefined;
+    | ((value: MutableCheckboxGroupValue, eventDetails: CheckboxGroupChangeEventDetails) => void)
+    | undefined;
   /**
    * Names of all checkboxes in the group. Use this when creating a parent checkbox.
    */
-  allValues?: string[] | undefined;
+  allValues?: CheckboxGroupValue | undefined;
   /**
    * Whether the component should ignore user interaction.
    * @default false

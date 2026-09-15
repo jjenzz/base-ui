@@ -374,6 +374,12 @@ type AccordionPanelState = {
 type AccordionValue<Value = any> = Value[];
 ```
 
+### MutableAccordionValue
+
+```typescript
+type MutableAccordionValue<Value = any> = Value[];
+```
+
 ## External Types
 
 ### Orientation
@@ -389,7 +395,7 @@ type Orientation = 'horizontal' | 'vertical';
 - `Accordion.Header`: `Accordion.Header`, `Accordion.Header.State`, `Accordion.Header.Props`
 - `Accordion.Trigger`: `Accordion.Trigger`, `Accordion.Trigger.State`, `Accordion.Trigger.Props`
 - `Accordion.Panel`: `Accordion.Panel`, `Accordion.Panel.State`, `Accordion.Panel.Props`
-- `Default`: `AccordionValue`, `AccordionRootState`, `AccordionRootProps`, `AccordionRootChangeEventReason`, `AccordionRootChangeEventDetails`, `AccordionItemState`, `AccordionItemProps`, `AccordionItemChangeEventReason`, `AccordionItemChangeEventDetails`, `AccordionHeaderState`, `AccordionHeaderProps`, `AccordionTriggerState`, `AccordionTriggerProps`, `AccordionPanelState`, `AccordionPanelProps`
+- `Default`: `AccordionValue`, `MutableAccordionValue`, `AccordionRootState`, `AccordionRootProps`, `AccordionRootChangeEventReason`, `AccordionRootChangeEventDetails`, `AccordionItemState`, `AccordionItemProps`, `AccordionItemChangeEventReason`, `AccordionItemChangeEventDetails`, `AccordionHeaderState`, `AccordionHeaderProps`, `AccordionTriggerState`, `AccordionTriggerProps`, `AccordionPanelState`, `AccordionPanelProps`
 
 ## Canonical Types
 

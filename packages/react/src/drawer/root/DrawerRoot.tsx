@@ -324,7 +324,7 @@ export interface DrawerRootProps<Payload = unknown> {
    * numbers greater than 1 as pixel values, or strings in `px`/`rem` units
    * (for example, `'148px'` or `'30rem'`).
    */
-  snapPoints?: DrawerSnapPoint[] | undefined;
+  snapPoints?: readonly DrawerSnapPoint[] | undefined;
   /**
    * Disables velocity-based snap skipping so drag distance determines the next snap point.
    * @default false

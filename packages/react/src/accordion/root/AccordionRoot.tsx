@@ -133,7 +133,8 @@ export const AccordionRoot = React.forwardRef(function AccordionRoot<Value = any
   <Value = any>(props: AccordionRoot.Props<Value>): React.JSX.Element;
 };
 
-export type AccordionValue<Value = any> = Value[];
+export type AccordionValue<Value = any> = readonly Value[];
+export type MutableAccordionValue<Value = any> = Value[];
 
 export interface AccordionRootState<Value = any> {
   /**
@@ -205,7 +206,7 @@ export interface AccordionRootProps<Value = any> extends BaseUIComponentProps<
    * Provides the new value as an argument.
    */
   onValueChange?:
-    | ((value: AccordionValue<Value>, eventDetails: AccordionRootChangeEventDetails) => void)
+    | ((value: MutableAccordionValue<Value>, eventDetails: AccordionRootChangeEventDetails) => void)
     | undefined;
   /**
    * Whether multiple items can be open at the same time.

@@ -80,6 +80,20 @@ type ToggleGroupChangeEventDetails = {
 };
 ```
 
+## Additional Types
+
+### MutableToggleGroupValue
+
+```typescript
+type MutableToggleGroupValue<Value extends string = string> = Value[];
+```
+
+### ToggleGroupValue
+
+```typescript
+type ToggleGroupValue<Value extends string = string> = Value[];
+```
+
 ## External Types
 
 ### Orientation

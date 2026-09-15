@@ -77,6 +77,20 @@ type CheckboxGroupChangeEventDetails = {
 };
 ```
 
+## Additional Types
+
+### CheckboxGroupValue
+
+```typescript
+type CheckboxGroupValue = string[];
+```
+
+### MutableCheckboxGroupValue
+
+```typescript
+type MutableCheckboxGroupValue = string[];
+```
+
 ## Canonical Types
 
 Maps `Canonical`: `Alias` — Use Canonical when its namespace is already imported; otherwise use Alias.
