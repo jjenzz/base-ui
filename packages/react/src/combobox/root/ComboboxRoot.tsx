@@ -36,13 +36,15 @@ type ModeFromMultiple<Multiple extends boolean | undefined> = Multiple extends t
   ? 'multiple'
   : 'single';
 
-type ComboboxInputValue<Value, Multiple extends boolean | undefined> = Multiple extends true
-  ? readonly Value[]
-  : Value;
-
-type ComboboxOutputValue<Value, Multiple extends boolean | undefined> = Multiple extends true
+type MutableComboboxValue<Value, Multiple extends boolean | undefined> = Multiple extends true
   ? Value[]
   : Value;
+
+type ComboboxValue<Value, Multiple extends boolean | undefined> = Multiple extends true
+  ? readonly Value[]
+  : Value extends object
+    ? Readonly<Value>
+    : Value;
 
 export type ComboboxRootProps<
   Value,
@@ -116,7 +118,7 @@ export type ComboboxRootProps<
    *
    * To render a controlled combobox, use the `value` prop instead.
    */
-  defaultValue?: ComboboxInputValue<Value, Multiple> | null | undefined;
+  defaultValue?: ComboboxValue<Value, Multiple> | null | undefined;
   /**
    * A ref to imperative actions.
    * - `unmount`: Manually unmounts the combobox.
@@ -150,13 +152,13 @@ export type ComboboxRootProps<
   /**
    * The selected value of the combobox. Use when controlled.
    */
-  value?: ComboboxInputValue<Value, Multiple> | null | undefined;
+  value?: ComboboxValue<Value, Multiple> | null | undefined;
   /**
    * Event handler called when the selected value of the combobox changes.
    */
   onValueChange?:
     | ((
-        value: ComboboxOutputValue<Value, Multiple> | (Multiple extends true ? never : null),
+        value: MutableComboboxValue<Value, Multiple> | (Multiple extends true ? never : null),
         eventDetails: ComboboxRoot.ChangeEventDetails,
       ) => void)
     | undefined;

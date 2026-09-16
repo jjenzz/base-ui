@@ -1075,7 +1075,7 @@ export type UseSwipeDismissProgressDetails = SwipeProgressDetailsInternal;
 
 export interface UseSwipeDismissOptions {
   enabled: boolean;
-  directions: SwipeDirection[];
+  directions: readonly SwipeDirection[];
   elementRef: React.RefObject<HTMLElement | null>;
   movementCssVars: { x: string; y: string };
   /**

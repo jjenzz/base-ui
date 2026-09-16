@@ -38,7 +38,7 @@ function unwrapHost(node: Node | null): Element | null {
   return isShadowRoot(node) ? node.host : unwrapHost(node.parentNode);
 }
 
-const correctElements = (parent: HTMLElement, targets: Element[]): Element[] =>
+const correctElements = (parent: HTMLElement, targets: readonly Element[]): Element[] =>
   targets
     .map((target) => {
       if (parent.contains(target)) {
@@ -55,7 +55,7 @@ const correctElements = (parent: HTMLElement, targets: Element[]): Element[] =>
     })
     .filter((x): x is Element => x != null);
 
-const buildKeepSet = (targets: Element[]): Set<Node> => {
+const buildKeepSet = (targets: readonly Element[]): Set<Node> => {
   const keep = new Set<Node>();
 
   targets.forEach((target) => {
@@ -100,7 +100,7 @@ const collectOutsideElements = (
 };
 
 function applyAttributeToOthers(
-  uncorrectedAvoidElements: Element[],
+  uncorrectedAvoidElements: readonly Element[],
   body: HTMLElement,
   ariaHidden: boolean,
   inert: boolean,
@@ -212,7 +212,10 @@ function applyAttributeToOthers(
   };
 }
 
-export function markOthers(avoidElements: Element[], options: MarkOthersOptions = {}): Undo {
+export function markOthers(
+  avoidElements: readonly Element[],
+  options: MarkOthersOptions = {},
+): Undo {
   const { ariaHidden = false, inert = false, mark = true } = options;
   const body = ownerDocument(avoidElements[0]).body;
   return applyAttributeToOthers(avoidElements, body, ariaHidden, inert, { mark });

@@ -23,7 +23,7 @@ export interface CompositeGridItemSize {
 export interface CompositeGridConfig {
   cols: number;
   dense?: boolean | undefined;
-  itemSizes?: CompositeGridItemSize[] | undefined;
+  itemSizes?: readonly CompositeGridItemSize[] | undefined;
 }
 
 export interface CompositeGridNavigationState {
@@ -35,7 +35,7 @@ export interface CompositeGridNavigationState {
   orientation: 'horizontal' | 'vertical' | 'both';
   loopFocus: boolean;
   onLoop?: CompositeGridOnLoop | undefined;
-  disabledIndices?: number[] | undefined;
+  disabledIndices?: readonly number[] | undefined;
   rtl: boolean;
 }
 

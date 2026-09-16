@@ -1,6 +1,6 @@
 'use client';
 import * as React from 'react';
-import type { AccordionRoot } from './AccordionRoot';
+import type { AccordionRoot, AccordionValue } from './AccordionRoot';
 
 export interface AccordionRootContext<Value = any> {
   disabled: boolean;
@@ -12,7 +12,7 @@ export interface AccordionRootContext<Value = any> {
   hiddenUntilFound: boolean;
   keepMounted: boolean;
   state: AccordionRoot.State<Value>;
-  value: AccordionRoot.Value<Value>;
+  value: AccordionValue<Value>;
 }
 
 export const AccordionRootContext = React.createContext<AccordionRootContext<any> | undefined>(

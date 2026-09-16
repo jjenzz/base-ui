@@ -41,8 +41,8 @@ export interface CompositeItemProps<Metadata, State extends Record<string, any>>
 > {
   children?: React.ReactNode;
   metadata?: Metadata | undefined;
-  refs?: React.Ref<HTMLElement | null>[] | undefined;
-  props?: Array<Record<string, any> | (() => Record<string, any>)> | undefined;
+  refs?: readonly React.Ref<HTMLElement | null>[] | undefined;
+  props?: readonly (Record<string, any> | (() => Record<string, any>))[] | undefined;
   state?: State | undefined;
   stateAttributesMapping?: StateAttributesMapping<State> | undefined;
   tag?: keyof React.JSX.IntrinsicElements | undefined;

@@ -51,7 +51,7 @@ export interface UseRenderParameters<
   /**
    * The ref to apply to the rendered element.
    */
-  ref?: React.Ref<RenderedElementType> | React.Ref<RenderedElementType>[] | undefined;
+  ref?: React.Ref<RenderedElementType> | readonly React.Ref<RenderedElementType>[] | undefined;
   /**
    * The state of the component, passed as the second argument to the `render` callback.
    * State properties are automatically converted to data-* attributes.

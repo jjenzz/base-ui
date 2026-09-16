@@ -25,7 +25,7 @@ export interface DrawerRootContext {
   /**
    * Snap points used to size/position the drawer.
    */
-  snapPoints?: DrawerSnapPoint[] | undefined;
+  snapPoints?: readonly DrawerSnapPoint[] | undefined;
   /**
    * The currently active snap point.
    */

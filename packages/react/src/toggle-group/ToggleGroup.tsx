@@ -58,7 +58,7 @@ export const ToggleGroup = React.forwardRef(function ToggleGroup<Value extends s
       nextPressed: boolean,
       eventDetails: BaseUIChangeEventDetails<typeof REASONS.none>,
     ) => {
-      let newGroupValue: Value[];
+      let newGroupValue: MutableToggleGroupValue<Value>;
       if (multiple) {
         newGroupValue = groupValue.slice();
         if (nextPressed) {
@@ -146,6 +146,9 @@ export interface ToggleGroupState {
   orientation: Orientation;
 }
 
+export type ToggleGroupValue<Value extends string = string> = readonly Value[];
+export type MutableToggleGroupValue<Value extends string = string> = Value[];
+
 export interface ToggleGroupProps<Value extends string> extends BaseUIComponentProps<
   'div',
   ToggleGroupState
@@ -155,18 +158,22 @@ export interface ToggleGroupProps<Value extends string> extends BaseUIComponentP
    * the values of all pressed toggle buttons.
    * This is the controlled counterpart of `defaultValue`.
    */
-  value?: readonly Value[] | undefined;
+  value?: ToggleGroupValue<Value> | undefined;
   /**
    * The pressed state of the toggle group represented by an array of
    * the values of all pressed toggle buttons.
    * This is the uncontrolled counterpart of `value`.
    */
-  defaultValue?: readonly Value[] | undefined;
+  defaultValue?: ToggleGroupValue<Value> | undefined;
   /**
    * Callback fired when the pressed states of the toggle group changes.
    */
   onValueChange?:
-    ((groupValue: Value[], eventDetails: ToggleGroup.ChangeEventDetails) => void) | undefined;
+    | ((
+        groupValue: MutableToggleGroupValue<Value>,
+        eventDetails: ToggleGroup.ChangeEventDetails,
+      ) => void)
+    | undefined;
   /**
    * Whether the toggle group should ignore user interaction.
    * @default false

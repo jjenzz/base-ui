@@ -11,7 +11,7 @@ interface UsePositionerOptions {
   styles: React.CSSProperties;
   transitionStatus: TransitionStatus;
   props?: React.ComponentProps<'div'> | undefined;
-  refs?: React.Ref<HTMLDivElement> | (React.Ref<HTMLDivElement> | undefined)[] | undefined;
+  refs?: React.Ref<HTMLDivElement> | readonly (React.Ref<HTMLDivElement> | undefined)[] | undefined;
   hidden?: boolean | undefined;
   inert?: boolean | undefined;
 }

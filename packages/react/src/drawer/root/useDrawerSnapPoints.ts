@@ -66,7 +66,7 @@ function resolveSnapPointValue(
 /**
  * Returns the index of the value closest to `target`, or `-1` if `values` is empty.
  */
-export function closestSnapPointIndex(values: number[], target: number): number {
+export function closestSnapPointIndex(values: readonly number[], target: number): number {
   let closestIndex = -1;
   let closestDistance = Infinity;
 

@@ -101,10 +101,10 @@ export interface CompositeRootProps<Metadata, State extends Record<string, any>>
   BaseUIComponentProps<'div', State>,
   'render' | 'className' | 'children' | 'style'
 > {
-  props?: Array<Record<string, any> | (() => Record<string, any>)> | undefined;
+  props?: readonly (Record<string, any> | (() => Record<string, any>))[] | undefined;
   state?: State | undefined;
   stateAttributesMapping?: StateAttributesMapping<State> | undefined;
-  refs?: React.Ref<HTMLElement | null>[] | undefined;
+  refs?: readonly React.Ref<HTMLElement | null>[] | undefined;
   tag?: keyof React.JSX.IntrinsicElements | undefined;
   orientation?: 'horizontal' | 'vertical' | 'both' | undefined;
   grid?: CompositeGridNavigator | undefined;
@@ -124,8 +124,8 @@ export interface CompositeRootProps<Metadata, State extends Record<string, any>>
   onKeyDown?: ((event: BaseUIEvent<React.KeyboardEvent>) => void) | undefined;
   stopEventPropagation?: boolean | undefined;
   rootRef?: React.RefObject<HTMLElement | null> | undefined;
-  disabledIndices?: number[] | undefined;
-  modifierKeys?: ModifierKey[] | undefined;
+  disabledIndices?: readonly number[] | undefined;
+  modifierKeys?: readonly ModifierKey[] | undefined;
   highlightItemOnHover?: boolean | undefined;
 }
 
