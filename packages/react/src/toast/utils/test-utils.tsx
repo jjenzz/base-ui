@@ -1,5 +1,12 @@
 import { Toast } from '@base-ui/react/toast';
 
+/** Gives jsdom the foreground-document baseline used by browser tests. */
+export function focusDocument() {
+  document.body.setAttribute('tabindex', '-1');
+  document.body.focus();
+  document.body.removeAttribute('tabindex');
+}
+
 /**
  * @internal
  */

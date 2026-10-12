@@ -84,6 +84,7 @@ function applyLimited(toasts: StoredToast[], limit: number): StoredToast[] {
 }
 
 export const selectors = {
+  viewport: (state: State) => state.viewport,
   toasts: (state: State) => state.toasts,
   isEmpty: (state: State) => state.toasts.length === 0,
   toast: (state: State, id: string) => state.toastMetadata.get(id)?.value,

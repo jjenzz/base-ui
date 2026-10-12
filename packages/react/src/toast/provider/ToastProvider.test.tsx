@@ -1,4 +1,4 @@
-import { expect, vi, describe, it } from 'vitest';
+import { expect, vi, describe, it, beforeEach } from 'vitest';
 import * as React from 'react';
 import { Toast } from '@base-ui/react/toast';
 import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
@@ -6,8 +6,11 @@ import { act, fireEvent, flushMicrotasks, reactMajor, screen } from '@mui/intern
 import { createRenderer } from '#test-utils';
 import { useToastProviderContext } from './ToastProviderContext';
 import type { ToastManager } from '../createToastManager';
+import { focusDocument } from '../utils/test-utils';
 
 describe('<Toast.Provider />', () => {
+  beforeEach(focusDocument);
+
   const { clock, render } = createRenderer();
 
   clock.withFakeTimers();

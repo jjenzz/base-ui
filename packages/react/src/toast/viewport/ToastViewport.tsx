@@ -33,6 +33,7 @@ export const ToastViewport = React.forwardRef(function ToastViewport(
   const touchActiveRef = React.useRef(false);
 
   const isEmpty = store.useState('isEmpty');
+  const viewport = store.useState('viewport');
   const toasts = store.useState('toasts');
   const focused = store.useState('focused');
   const expanded = store.useState('expanded');
@@ -43,20 +44,24 @@ export const ToastViewport = React.forwardRef(function ToastViewport(
   const highPriorityToasts = toasts.filter((toast) => toast.priority === 'high');
 
   React.useEffect(() => {
-    // `store.state.viewport` isn't available on the first render, since the portal node hasn't yet
-    // been created. Depending on `isEmpty` ensures the listeners are attached once toasts exist and
-    // the viewport ref is available.
-    const viewport = store.state.viewport;
-    if (!viewport || isEmpty) {
+    if (!viewport) {
       return undefined;
     }
 
     const win = ownerWindow(viewport);
     const doc = ownerDocument(viewport);
 
+    // Keep tracking window focus while empty so newly added toasts use the current pause state.
+    store.set('isWindowFocused', doc.hasFocus());
+    if (store.select('expandedOrOutOfFocus')) {
+      store.pauseTimers();
+    } else {
+      store.resumeTimers();
+    }
+
     // Listen globally for F6 so we can force-focus the viewport.
     function handleGlobalKeyDown(event: KeyboardEvent) {
-      if (event.key === 'F6' && getTarget(event) !== viewport) {
+      if (!store.select('isEmpty') && event.key === 'F6' && getTarget(event) !== viewport) {
         event.preventDefault();
         store.set('prevFocusElement', activeElement(doc) as HTMLElement | null);
         viewport?.focus({ preventScroll: true });
@@ -80,6 +85,9 @@ export const ToastViewport = React.forwardRef(function ToastViewport(
       }
 
       const target = getTarget(event);
+      if (target === win) {
+        store.set('isWindowFocused', true);
+      }
       const activeEl = activeElement(ownerDocument(viewport));
       if (
         target === win ||
@@ -90,16 +98,24 @@ export const ToastViewport = React.forwardRef(function ToastViewport(
       }
 
       // Wait for the `handleFocus` event to fire.
-      windowFocusTimeout.start(0, () => store.set('isWindowFocused', true));
+      if (target !== win) {
+        windowFocusTimeout.start(0, () => store.set('isWindowFocused', true));
+      }
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (!store.select('isEmpty')) {
+        store.handleDocumentPointerDown(event);
+      }
     }
 
     return mergeCleanups(
       addEventListener(win, 'keydown', handleGlobalKeyDown),
       addEventListener(win, 'blur', handleWindowBlur, true),
       addEventListener(win, 'focus', handleWindowFocus, true),
-      addEventListener(doc, 'pointerdown', store.handleDocumentPointerDown, true),
+      addEventListener(doc, 'pointerdown', handleDocumentPointerDown, true),
     );
-  }, [store, windowFocusTimeout, isEmpty]);
+  }, [store, windowFocusTimeout, viewport]);
 
   function handleFocusGuard(event: React.FocusEvent) {
     handlingFocusGuardRef.current = true;

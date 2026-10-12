@@ -1,11 +1,11 @@
-import { expect, vi, describe, it } from 'vitest';
+import { expect, vi, describe, it, beforeEach } from 'vitest';
 import * as React from 'react';
 import { Toast } from '@base-ui/react/toast';
 import { Dialog } from '@base-ui/react/dialog';
 import { fireEvent, flushMicrotasks, screen } from '@mui/internal-test-utils';
 import { createRenderer, isJSDOM } from '#test-utils';
 import { useToastManager } from './useToastManager';
-import { List } from './utils/test-utils';
+import { List, focusDocument } from './utils/test-utils';
 
 async function tick(clock: ReturnType<typeof createRenderer>['clock'], ms: number) {
   clock.tick(ms);
@@ -13,6 +13,8 @@ async function tick(clock: ReturnType<typeof createRenderer>['clock'], ms: numbe
 }
 
 describe.skipIf(!isJSDOM)('useToast', () => {
+  beforeEach(focusDocument);
+
   describe('add', () => {
     const { clock, render } = createRenderer();
 

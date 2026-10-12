@@ -1,12 +1,14 @@
-import { expect, vi, describe, it } from 'vitest';
+import { expect, vi, describe, it, beforeEach } from 'vitest';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Toast } from '@base-ui/react/toast';
 import { createRenderer, describeConformance, isJSDOM } from '#test-utils';
 import { act, fireEvent, screen, waitFor } from '@mui/internal-test-utils';
-import { List, Button } from '../utils/test-utils';
+import { List, Button, focusDocument } from '../utils/test-utils';
 
 describe('<Toast.Viewport />', () => {
+  beforeEach(focusDocument);
+
   const { render } = createRenderer();
 
   describeConformance(<Toast.Viewport />, () => ({
@@ -36,7 +38,7 @@ describe('<Toast.Viewport />', () => {
   });
 
   it.skipIf(!isJSDOM)(
-    'rebinds owner-document listeners once across empty store cycles',
+    'keeps owner-document listeners bound across empty store cycles',
     async () => {
       const iframe = document.createElement('iframe');
       document.body.appendChild(iframe);
@@ -108,26 +110,26 @@ describe('<Toast.Viewport />', () => {
           expect(iframeDocument.querySelector('[data-testid="root"]')).toBe(null),
         );
         expect(removeWindowListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(
-          1,
+          0,
         );
-        expect(removeWindowListener.mock.calls.filter(([type]) => type === 'blur')).toHaveLength(1);
+        expect(removeWindowListener.mock.calls.filter(([type]) => type === 'blur')).toHaveLength(0);
         expect(removeWindowListener.mock.calls.filter(([type]) => type === 'focus')).toHaveLength(
-          1,
+          0,
         );
         expect(
           removeDocumentListener.mock.calls.filter(([type]) => type === 'pointerdown'),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
 
         await user.click(add);
         await waitFor(() =>
           expect(iframeDocument.querySelector('[data-testid="root"]')).not.toBe(null),
         );
-        expect(addWindowListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(2);
-        expect(addWindowListener.mock.calls.filter(([type]) => type === 'blur')).toHaveLength(2);
-        expect(addWindowListener.mock.calls.filter(([type]) => type === 'focus')).toHaveLength(2);
+        expect(addWindowListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(1);
+        expect(addWindowListener.mock.calls.filter(([type]) => type === 'blur')).toHaveLength(1);
+        expect(addWindowListener.mock.calls.filter(([type]) => type === 'focus')).toHaveLength(1);
         expect(
           addDocumentListener.mock.calls.filter(([type]) => type === 'pointerdown'),
-        ).toHaveLength(2);
+        ).toHaveLength(1);
       } finally {
         addWindowListener.mockRestore();
         removeWindowListener.mockRestore();
@@ -137,6 +139,21 @@ describe('<Toast.Viewport />', () => {
       }
     },
   );
+
+  it('leaves F6 available while the viewport is empty', async () => {
+    await render(
+      <Toast.Provider>
+        <Toast.Portal>
+          <Toast.Viewport>
+            <List />
+          </Toast.Viewport>
+        </Toast.Portal>
+      </Toast.Provider>,
+    );
+    expect(screen.queryByTestId('root')).toBe(null);
+    expect(fireEvent.keyDown(document.body, { key: 'F6' })).toBe(true);
+    expect(document.body).toHaveFocus();
+  });
 
   it('throws a descriptive error when rendered outside <Toast.Provider>', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -445,6 +462,114 @@ describe('<Toast.Viewport />', () => {
     const { render: renderFakeTimers, clock } = createRenderer();
 
     clock.withFakeTimers();
+
+    it.each([
+      { name: 'a mounted viewport', initiallyFocused: true },
+      { name: 'a viewport first mounted in the background', initiallyFocused: false },
+    ])(
+      'pauses a background arrival in $name until window focus returns',
+      async ({ initiallyFocused }) => {
+        vi.spyOn(document, 'hasFocus').mockReturnValue(initiallyFocused);
+        const toastManager = Toast.createToastManager();
+
+        await renderFakeTimers(
+          <Toast.Provider toastManager={toastManager} timeout={1000}>
+            <Toast.Portal>
+              <Toast.Viewport>
+                <List />
+              </Toast.Viewport>
+            </Toast.Portal>
+          </Toast.Provider>,
+        );
+
+        expect(screen.queryByTestId('root')).toBe(null);
+        if (initiallyFocused) {
+          const blurEvent = new FocusEvent('blur');
+          Object.defineProperty(blurEvent, 'composedPath', { value: () => [window] });
+          fireEvent(window, blurEvent);
+        }
+        await act(async () => {
+          toastManager.add({ title: 'Background arrival' });
+        });
+        expect(screen.getByTestId('root')).toHaveTextContent('Background arrival');
+
+        clock.tick(1500);
+        expect(screen.getByTestId('root')).toHaveTextContent('Background arrival');
+
+        const focusEvent = new FocusEvent('focus');
+        Object.defineProperty(focusEvent, 'composedPath', { value: () => [window] });
+        fireEvent(window, focusEvent);
+        clock.tick(999);
+        expect(screen.getByTestId('root')).toHaveTextContent('Background arrival');
+        clock.tick(2);
+        expect(screen.queryByTestId('root')).toBe(null);
+      },
+    );
+
+    it('runs a new timer after window focus returned while the viewport was empty', async () => {
+      const toastManager = Toast.createToastManager();
+      await renderFakeTimers(
+        <Toast.Provider toastManager={toastManager} timeout={1000}>
+          <Toast.Viewport>
+            <List />
+          </Toast.Viewport>
+        </Toast.Provider>,
+      );
+
+      await act(async () => {
+        toastManager.add({ title: 'Manual', timeout: 0 });
+      });
+      expect(screen.getByTestId('root')).toHaveTextContent('Manual');
+      const blurEvent = new FocusEvent('blur');
+      Object.defineProperty(blurEvent, 'composedPath', { value: () => [window] });
+      fireEvent(window, blurEvent);
+      clock.tick(1500);
+      expect(screen.getByTestId('root')).toHaveTextContent('Manual');
+
+      await act(async () => {
+        toastManager.close();
+      });
+      expect(screen.queryByTestId('root')).toBe(null);
+      const focusEvent = new FocusEvent('focus');
+      Object.defineProperty(focusEvent, 'composedPath', { value: () => [window] });
+      fireEvent(window, focusEvent);
+      clock.tick(1);
+
+      await act(async () => {
+        toastManager.add({ title: 'After return' });
+      });
+      expect(screen.getByTestId('root')).toHaveTextContent('After return');
+      clock.tick(999);
+      expect(screen.getByTestId('root')).toHaveTextContent('After return');
+      clock.tick(2);
+      expect(screen.queryByTestId('root')).toBe(null);
+    });
+
+    it('runs a toast added synchronously by a window focus listener after an empty interval', async () => {
+      const toastManager = Toast.createToastManager();
+      await renderFakeTimers(
+        <Toast.Provider toastManager={toastManager} timeout={1000}>
+          <Toast.Viewport>
+            <List />
+          </Toast.Viewport>
+        </Toast.Provider>,
+      );
+      expect(screen.queryByTestId('root')).toBe(null);
+      const blurEvent = new FocusEvent('blur');
+      Object.defineProperty(blurEvent, 'composedPath', { value: () => [window] });
+      fireEvent(window, blurEvent);
+
+      const addOnFocus = () => toastManager.add({ title: 'Added on focus' });
+      window.addEventListener('focus', addOnFocus, { once: true });
+      const focusEvent = new FocusEvent('focus');
+      Object.defineProperty(focusEvent, 'composedPath', { value: () => [window] });
+      fireEvent(window, focusEvent);
+      expect(screen.getByTestId('root')).toHaveTextContent('Added on focus');
+      clock.tick(999);
+      expect(screen.getByTestId('root')).toHaveTextContent('Added on focus');
+      clock.tick(2);
+      expect(screen.queryByTestId('root')).toBe(null);
+    });
 
     it('pauses timers when hovering', async () => {
       await renderFakeTimers(
