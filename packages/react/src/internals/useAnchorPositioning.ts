@@ -495,9 +495,6 @@ export function useAnchorPositioningWithHook(
     placement,
     middleware,
     strategy: positionMethod,
-    whileElementsMounted: keepMounted
-      ? undefined
-      : (...args) => autoUpdate(...args, autoUpdateOptions),
     nodeId,
     externalTree,
   });
@@ -578,12 +575,29 @@ export function useAnchorPositioningWithHook(
     }
   }, [mounted, refs, anchorDep, anchorValueRef]);
 
-  React.useEffect(() => {
-    if (keepMounted && mounted && elements.reference && elements.floating) {
-      return autoUpdate(elements.reference, elements.floating, update, autoUpdateOptions);
+  const stableUpdate = useStableCallback(update);
+
+  // Changing placement must not recreate ResizeObservers during their delivery.
+  useIsoLayoutEffect(() => {
+    if (!keepMounted && elements.reference && elements.floating) {
+      return autoUpdate(elements.reference, elements.floating, stableUpdate, autoUpdateOptions);
     }
     return undefined;
-  }, [keepMounted, mounted, elements, update, autoUpdateOptions]);
+  }, [keepMounted, elements.reference, elements.floating, stableUpdate, autoUpdateOptions]);
+
+  React.useEffect(() => {
+    if (keepMounted && mounted && elements.reference && elements.floating) {
+      return autoUpdate(elements.reference, elements.floating, stableUpdate, autoUpdateOptions);
+    }
+    return undefined;
+  }, [
+    keepMounted,
+    mounted,
+    elements.reference,
+    elements.floating,
+    stableUpdate,
+    autoUpdateOptions,
+  ]);
 
   const renderedSide = getSide(renderedPlacement);
   const logicalRenderedSide = getLogicalSide(sideParam, renderedSide, isRtl);

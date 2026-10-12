@@ -8,6 +8,7 @@ import {
   describeConformance,
   isJSDOM,
   positionerConformanceTests,
+  waitSingleFrame,
 } from '#test-utils';
 
 describe('<Combobox.Positioner />', () => {
@@ -66,6 +67,97 @@ describe('<Combobox.Positioner />', () => {
     expect(bodyOverflowY).not.toBe('hidden');
     expect(htmlOverflowX).not.toBe('hidden');
     expect(htmlOverflowY).not.toBe('hidden');
+  });
+
+  describe.skipIf(isJSDOM)('resizing the anchor', () => {
+    it.each([{ keepMounted: false }, { keepMounted: true }])(
+      'flips without ResizeObserver errors with keepMounted=$keepMounted',
+      async ({ keepMounted }) => {
+        const errors: string[] = [];
+        const handleError = (event: ErrorEvent) => {
+          if (event.message.includes('ResizeObserver loop')) {
+            errors.push(event.message);
+            event.preventDefault();
+          }
+        };
+        window.addEventListener('error', handleError);
+
+        function Test() {
+          const [height, setHeight] = React.useState(34);
+          const [top, setTop] = React.useState(window.innerHeight - 270);
+          const [sideOffset, setSideOffset] = React.useState(4);
+          const [anchorKey, setAnchorKey] = React.useState(0);
+          return (
+            <React.Fragment>
+              <button onClick={() => setHeight(100)}>Grow</button>
+              <button onClick={() => setHeight(34)}>Shrink</button>
+              <button onClick={() => setTop(30)}>Move</button>
+              <button onClick={() => setSideOffset(12)}>Offset</button>
+              <button onClick={() => setAnchorKey((key) => key + 1)}>Replace anchor</button>
+              <Combobox.Root open>
+                <Combobox.InputGroup
+                  key={anchorKey}
+                  data-testid="anchor"
+                  style={{ position: 'fixed', top, left: 40, width: 220, height }}
+                >
+                  <Combobox.Input aria-label="Languages" />
+                </Combobox.InputGroup>
+                <Combobox.Portal keepMounted={keepMounted}>
+                  <Combobox.Positioner data-testid="positioner" sideOffset={sideOffset}>
+                    <Combobox.Popup style={{ width: 220, height: 200 }}>
+                      <Combobox.List>
+                        <Combobox.Item value="JavaScript">JavaScript</Combobox.Item>
+                      </Combobox.List>
+                    </Combobox.Popup>
+                  </Combobox.Positioner>
+                </Combobox.Portal>
+              </Combobox.Root>
+            </React.Fragment>
+          );
+        }
+
+        try {
+          const { user } = await render(<Test />);
+          const positioner = screen.getByTestId('positioner');
+          await waitFor(() => expect(positioner).toHaveAttribute('data-side', 'bottom'));
+          await user.click(screen.getByText('Grow'));
+          await waitFor(() => expect(positioner).toHaveAttribute('data-side', 'top'));
+          await user.click(screen.getByText('Shrink'));
+          await waitSingleFrame();
+          await waitSingleFrame();
+          expect(positioner).toHaveAttribute('data-side', 'top');
+          await user.click(screen.getByText('Move'));
+          await waitFor(() => expect(positioner).toHaveAttribute('data-side', 'bottom'));
+          await waitSingleFrame();
+          await waitSingleFrame();
+          const anchor = screen.getByTestId('anchor');
+          expect(
+            positioner.getBoundingClientRect().top - anchor.getBoundingClientRect().bottom,
+          ).toBe(4);
+          await user.click(screen.getByText('Offset'));
+          await waitFor(() =>
+            expect(
+              positioner.getBoundingClientRect().top - anchor.getBoundingClientRect().bottom,
+            ).toBe(12),
+          );
+          await user.click(screen.getByText('Replace anchor'));
+          const replacementAnchor = screen.getByTestId('anchor');
+          expect(replacementAnchor).not.toBe(anchor);
+          await user.click(screen.getByText('Grow'));
+          await waitFor(() =>
+            expect(
+              positioner.getBoundingClientRect().top -
+                replacementAnchor.getBoundingClientRect().bottom,
+            ).toBe(12),
+          );
+          await waitSingleFrame();
+          await waitSingleFrame();
+          expect(errors).toEqual([]);
+        } finally {
+          window.removeEventListener('error', handleError);
+        }
+      },
+    );
   });
 
   describeConformance(<Combobox.Positioner />, () => ({
