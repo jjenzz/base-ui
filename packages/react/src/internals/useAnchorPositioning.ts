@@ -575,19 +575,19 @@ export function useAnchorPositioningWithHook(
     }
   }, [mounted, refs, anchorDep, anchorValueRef]);
 
-  const stableUpdate = useStableCallback(update);
+  const handleUpdate = useStableCallback(update);
 
   // Changing placement must not recreate ResizeObservers during their delivery.
   useIsoLayoutEffect(() => {
     if (!keepMounted && elements.reference && elements.floating) {
-      return autoUpdate(elements.reference, elements.floating, stableUpdate, autoUpdateOptions);
+      return autoUpdate(elements.reference, elements.floating, handleUpdate, autoUpdateOptions);
     }
     return undefined;
-  }, [keepMounted, elements.reference, elements.floating, stableUpdate, autoUpdateOptions]);
+  }, [keepMounted, elements.reference, elements.floating, handleUpdate, autoUpdateOptions]);
 
   React.useEffect(() => {
     if (keepMounted && mounted && elements.reference && elements.floating) {
-      return autoUpdate(elements.reference, elements.floating, stableUpdate, autoUpdateOptions);
+      return autoUpdate(elements.reference, elements.floating, handleUpdate, autoUpdateOptions);
     }
     return undefined;
   }, [
@@ -595,7 +595,7 @@ export function useAnchorPositioningWithHook(
     mounted,
     elements.reference,
     elements.floating,
-    stableUpdate,
+    handleUpdate,
     autoUpdateOptions,
   ]);
 
