@@ -27,6 +27,7 @@ import { useSelectRootContext } from '../root/SelectRootContext';
 import type { SelectListProps } from '../list/SelectList';
 import { useSelectFilterNavigationContext } from './SelectFilterContext';
 import { useSelectFilterKeyDown } from './useSelectFilterKeyDown';
+import { isMainOrientationKey } from '../../utils/popups/interactions/useListNavigation';
 
 const DETACHED_LIST: CompositeListContextValue<unknown> = {
   register: NOOP,
@@ -64,13 +65,26 @@ export const SelectFilterList = React.forwardRef(function SelectFilterList(
 
   const handleKeyDown = useStableCallback((event: React.KeyboardEvent<HTMLElement>) => {
     const owner = focusOwnerRef.current;
-    if (
-      owner == null ||
-      activeElement(ownerDocument(owner)) === owner ||
-      !contains(event.currentTarget, getTarget(event.nativeEvent) as Element) ||
-      // An option that already acted on the key keeps it.
-      event.defaultPrevented
-    ) {
+    const target = getTarget(event.nativeEvent) as Element;
+    const ownerFocused = owner != null && activeElement(ownerDocument(owner)) === owner;
+    const fromNestedPopup = !contains(event.currentTarget, target);
+    if (owner == null || ownerFocused || fromNestedPopup) {
+      if (
+        event.which !== 229 &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        isMainOrientationKey(event.key, 'vertical')
+      ) {
+        // Like Menu, keep relayed item keys and nested popup keys from also navigating this popup.
+        event.stopPropagation();
+      }
+      return;
+    }
+
+    // An option that already acted on the key keeps it.
+    if (event.defaultPrevented) {
       return;
     }
 

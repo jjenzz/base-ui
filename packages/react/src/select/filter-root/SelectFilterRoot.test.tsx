@@ -641,6 +641,40 @@ describe('<Select.FilterProvider><Select.Root/></Select.FilterProvider>', () => 
   });
 
   describe('keyboard', () => {
+    it('routes listbox keys through the input when the listbox has DOM focus', async () => {
+      const { user } = await render(<Test />);
+      await user.click(screen.getByTestId('trigger'));
+      const input = await screen.findByRole('searchbox', { name: 'Filter countries' });
+      await waitFor(() => {
+        expect(input).toHaveFocus();
+      });
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+      const list = screen.getByRole('listbox');
+
+      await act(async () => {
+        input.blur();
+        list.focus();
+      });
+      expect(list).toHaveFocus();
+      await user.keyboard('[ArrowDown]');
+
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute(
+        'aria-activedescendant',
+        screen.getByRole('option', { name: 'Australia' }).id,
+      );
+
+      await user.keyboard('[ArrowDown]');
+      expect(input).toHaveAttribute(
+        'aria-activedescendant',
+        screen.getByRole('option', { name: 'France' }).id,
+      );
+
+      await user.keyboard('[Enter]');
+      expect(screen.getByTestId('value')).toHaveTextContent('France');
+      expect(screen.queryByRole('dialog')).toBe(null);
+    });
+
     it.each([
       { key: 'ArrowDown', position: 'first', name: 'Australia' },
       { key: 'ArrowUp', position: 'last', name: 'Japan' },
