@@ -13,7 +13,6 @@ export type State = {
   /** Whether pressing an item without a modifier replaces the selection (`multiple="opt-in"`). */
   optInMode: boolean;
 
-  itemToStringLabel: ((item: any) => string) | undefined;
   itemToStringValue: ((item: any) => string) | undefined;
   isItemEqualToValue: (itemValue: any, selectedValue: any) => boolean;
 
@@ -51,7 +50,6 @@ export const selectors = {
   multiple: createSelector((state: State) => state.multiple),
   optInMode: createSelector((state: State) => state.optInMode),
 
-  itemToStringLabel: createSelector((state: State) => state.itemToStringLabel),
   itemToStringValue: createSelector((state: State) => state.itemToStringValue),
   isItemEqualToValue: createSelector((state: State) => state.isItemEqualToValue),
 
@@ -107,7 +105,6 @@ function createInitialState(): State {
     id: undefined,
     labelId: undefined,
     multiple: false,
-    itemToStringLabel: undefined,
     itemToStringValue: undefined,
     optInMode: false,
     isItemEqualToValue: Object.is,
