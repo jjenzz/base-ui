@@ -41,6 +41,8 @@ export type Context = {
   lastSelectedIndexRef: React.RefObject<number | null>;
   validation: UseFieldValidationReturnValue;
   setValue: (nextValue: any, eventDetails: ListboxRoot.ChangeEventDetails) => void;
+  /** The event that caused the current `activeIndex` update, read by `onItemHighlighted`. */
+  highlightEvent: Event | undefined;
 };
 
 export const selectors = {
@@ -88,6 +90,16 @@ export class ListboxStore extends ReactStore<Readonly<State>, Context, typeof se
       selectors,
     );
   }
+
+  /**
+   * Sets the highlighted index and records the event that caused it,
+   * so `onItemHighlighted` can report the reason.
+   */
+  setActiveIndex(index: number | null, event?: Event) {
+    this.context.highlightEvent = event;
+    this.set('activeIndex', index);
+    this.context.highlightEvent = undefined;
+  }
 }
 
 function createInitialState(): State {
@@ -128,5 +140,6 @@ function createInitialContext(): Context {
       change: () => {},
     },
     setValue: () => {},
+    highlightEvent: undefined,
   };
 }
