@@ -2394,7 +2394,6 @@ describe('<Listbox.Root />', () => {
         setStart(startProp);
       }, [startProp]);
 
-
       return (
         <div>
           <button>Before</button>
@@ -2657,6 +2656,29 @@ describe('<Listbox.Root />', () => {
       expect(handleValueChange.mock.calls[0][0]).toEqual(['New 0', ...ALL_ITEMS]);
     });
 
+    it('reads disabled states from the latest render when only other state changed', async () => {
+      const handleValueChange = vi.fn();
+      const { setProps } = await render(
+        <VirtualList multiple value={[]} onValueChange={handleValueChange} />,
+      );
+      await act(async () => screen.getByRole('option', { name: 'Item 0' }).focus());
+
+      // Reads every item's disabled state while none is disabled.
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'a', ctrlKey: true });
+      await flushMicrotasks();
+      expect(handleValueChange.mock.calls[0][0]).toEqual(ALL_ITEMS);
+
+      // The items stay the same; only the state the render function reads changes.
+      await setProps({ disabledItems: ['Item 50'] });
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'a', ctrlKey: true });
+      await flushMicrotasks();
+
+      expect(handleValueChange).toHaveBeenCalledTimes(2);
+      expect(handleValueChange.mock.calls[1][0]).toEqual(
+        ALL_ITEMS.filter((item) => item !== 'Item 50'),
+      );
+    });
+
     it('moves focus to a selected item that is not rendered when tabbing in', async () => {
       const { user } = await render(<VirtualList defaultValue="Item 50" />);
       expect(screen.queryByRole('option', { name: 'Item 50' })).toBe(null);
@@ -2717,6 +2739,39 @@ describe('<Listbox.Root />', () => {
         </Listbox.Root>
       );
     }
+
+    it('passes each item its index within its group', async () => {
+      const renderedIndexes: Array<[string, number]> = [];
+      await render(
+        <Listbox.Root items={GROUPS}>
+          <Listbox.List aria-label="Produce">
+            {(group: ProduceGroup) => (
+              <Listbox.Group items={group.items}>
+                <Listbox.GroupLabel>{group.name}</Listbox.GroupLabel>
+                <Listbox.Collection>
+                  {(item: string, index: number) => {
+                    renderedIndexes.push([item, index]);
+                    return <Listbox.Item value={item}>{item}</Listbox.Item>;
+                  }}
+                </Listbox.Collection>
+              </Listbox.Group>
+            )}
+          </Listbox.List>
+        </Listbox.Root>,
+      );
+
+      expect(Object.fromEntries(renderedIndexes)).toEqual({
+        Apple: 0,
+        Banana: 1,
+        Cherry: 2,
+        Carrot: 0,
+        Leek: 1,
+        Pea: 2,
+        Oat: 0,
+        Rice: 1,
+        Wheat: 2,
+      });
+    });
 
     it('renders only the groups with items in the range, each wrapping its items', async () => {
       await render(<GroupedList />);

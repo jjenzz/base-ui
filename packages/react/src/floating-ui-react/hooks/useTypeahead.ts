@@ -178,13 +178,15 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
     // allow it in this case, too. Unavailable items are skipped while matching, so
     // they must be ignored here as well — otherwise a hidden or disabled double-letter
     // label would block rapid cycling through the available items.
-    const allowRapidSuccessionOfFirstLetter = listContent.every((text, index) =>
-      text && isItemAvailable(index) ? text[0]?.toLowerCase() !== text[1]?.toLowerCase() : true,
-    );
+    // Only checked when the same letter is typed again, so the other keys don't read every label.
+    const allowRapidSuccessionOfFirstLetter = () =>
+      listContent.every((text, index) =>
+        text && isItemAvailable(index) ? text[0]?.toLowerCase() !== text[1]?.toLowerCase() : true,
+      );
 
     // Allows the user to cycle through items that start with the same letter
     // in rapid succession.
-    if (allowRapidSuccessionOfFirstLetter && stringRef.current === event.key) {
+    if (stringRef.current === event.key && allowRapidSuccessionOfFirstLetter()) {
       stringRef.current = '';
       prevIndexRef.current = matchIndexRef.current;
     }

@@ -23,14 +23,13 @@ import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { selectionReducer } from '../utils/selectionReducer';
 import type { SelectionAction } from '../utils/selectionReducer';
-import {
-  ListboxCollectionContext,
-  ListboxItemIndexContext,
-  ListboxListGroupContext,
-} from './ListboxHiddenItems';
+import { ListboxHiddenRoot, ListboxListGroupContext } from './ListboxHiddenItems';
+import type { ListboxHiddenItemEntry } from './ListboxHiddenItems';
 import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
-import type { ListboxCollection } from './ListboxHiddenItems';
-import { ListboxItem } from '../item/ListboxItem';
+
+// How many items are read at a time when the data of items that aren't rendered is needed.
+const MIN_READ_BATCH = 100;
+const MAX_READ_BATCH = 2000;
 
 /**
  * A container for the listbox items.
@@ -598,106 +597,141 @@ export const ListboxList = React.forwardRef(function ListboxList(
     content = children;
   }
 
-  // With `range`, the listbox reads the labels and disabled states of the items that aren't
-  // rendered by calling each `Listbox.Collection` render function for every item when the items
-  // change. A `Listbox.Item` with a `label` or text children has its data in its props, so it
-  // doesn't render. Only the rest render into a hidden copy in a detached fragment.
+  // With `range`, the listbox reads the labels and disabled states of items that aren't rendered
+  // only when something needs them, such as typeahead or selecting a range. It renders a batch of
+  // items around the one being read into a detached fragment, with the latest render function,
+  // and reads what each item registers. Nothing is kept between renders, so it's never stale.
+  const hasCollection = range != null;
   const fragment = useRefWithInit(() =>
     typeof document === 'undefined' ? null : document.createDocumentFragment(),
   ).current;
-  // The hidden items that rendered, by position. Their text is read only when it's needed.
-  const renderedEntriesRef = React.useRef(
-    new Map<number, { element: HTMLElement; label: string | undefined; disabled: boolean }>(),
-  );
-  const collectionValue = useRefWithInit((): ListboxCollection => ({
-    record(element, index, label, disabled) {
-      if (index === -1) {
-        return;
-      }
-      if (element) {
-        renderedEntriesRef.current.set(index, { element, label, disabled });
-      } else {
-        renderedEntriesRef.current.delete(index);
-      }
-      store.context.labelsRef.invalidate();
-      store.context.disabledItemsRef.invalidate();
-    },
-  })).current;
-  const hasCollection = range != null;
-  const [hiddenElements, setHiddenElements] = React.useState<React.ReactNode[]>(EMPTY_ARRAY);
+  const registry = useRefWithInit(() => new Map<number, ListboxHiddenItemEntry>()).current;
+  const hiddenControllerRef = React.useRef<((indexes: number[]) => void) | null>(null);
 
-  // Runs after the `Listbox.Collection` parts have committed, since in a grouped list their render
-  // functions only exist once they've rendered.
-  useIsoLayoutEffect(() => {
-    const { labelsRef: lazyLabels, disabledItemsRef: lazyDisabled, itemTemplates } = store.context;
-    if (!hasCollection || !items) {
-      lazyLabels.resolve = null;
-      lazyDisabled.resolve = null;
-      setHiddenElements(EMPTY_ARRAY);
+  const renderHiddenItem = useStableCallback((index: number) => {
+    const { itemTemplates, valuesRef } = store.context;
+    let groupIndex = -1;
+    let offset = 0;
+    if (groupInfos) {
+      for (const info of groupInfos) {
+        if (info.offset > index) {
+          break;
+        }
+        groupIndex = info.index;
+        offset = info.offset;
+      }
+    }
+    // A group that isn't rendered uses the render function of a group that is.
+    let template = itemTemplates.get(groupIndex);
+    if (!template) {
+      itemTemplates.forEach((candidate) => {
+        template = candidate;
+      });
+    }
+    return template ? template(valuesRef.current[index], index - offset) : null;
+  });
+
+  // What's been read since the list last rendered. Batches grow while a scan keeps going in one
+  // direction, so reading every item takes a handful of batches.
+  const readCacheRef = React.useRef({
+    labels: [] as Array<string | null>,
+    disabled: [] as boolean[],
+    batchStart: -1,
+    batchEnd: -1,
+    batchSize: 0,
+  });
+
+  const readItem = useStableCallback((index: number) => {
+    const cache = readCacheRef.current;
+    if (index in cache.disabled) {
       return;
     }
+    const count = store.state.items?.length ?? 0;
+    let start: number;
+    let end: number;
+    if (index === cache.batchEnd) {
+      cache.batchSize = Math.min(cache.batchSize * 2, MAX_READ_BATCH);
+      start = index;
+      end = Math.min(count, index + cache.batchSize);
+    } else if (index === cache.batchStart - 1) {
+      cache.batchSize = Math.min(cache.batchSize * 2, MAX_READ_BATCH);
+      start = Math.max(0, index - cache.batchSize + 1);
+      end = index + 1;
+    } else {
+      cache.batchSize = MIN_READ_BATCH;
+      start = Math.max(0, index - MIN_READ_BATCH / 2);
+      end = Math.min(count, start + MIN_READ_BATCH);
+    }
+    cache.batchStart = start;
+    cache.batchEnd = end;
 
-    // A group that isn't rendered uses the render function of a group that is.
-    let fallbackTemplate: ((item: any, index: number) => React.ReactNode) | undefined;
-    itemTemplates.forEach((template) => {
-      fallbackTemplate = template;
-    });
-
-    const known: Array<{ label: string; disabled: boolean } | undefined> = new Array(items.length);
-    const rendered: React.ReactNode[] = [];
-    let groupPosition = 0;
-    for (let index = 0; index < items.length; index += 1) {
-      let groupIndex = -1;
-      if (groupInfos) {
-        while (
-          groupPosition < groupInfos.length - 1 &&
-          index >= groupInfos[groupPosition].offset + groupInfos[groupPosition].size
-        ) {
-          groupPosition += 1;
-        }
-        groupIndex = groupPosition;
-      }
-      const template = itemTemplates.get(groupIndex) ?? fallbackTemplate;
-      if (!template) {
-        continue;
-      }
-      const element = template(items[index], index);
-      const data = readItemData(element);
-      if (data) {
-        known[index] = data;
-      } else {
-        rendered.push(
-          <ListboxItemIndexContext.Provider key={index} value={index}>
-            {element}
-          </ListboxItemIndexContext.Provider>,
-        );
+    const indexes: number[] = [];
+    for (let position = start; position < end; position += 1) {
+      if (!(position in cache.disabled)) {
+        indexes.push(position);
       }
     }
-    setHiddenElements(rendered.length > 0 ? rendered : EMPTY_ARRAY);
+    ReactDOM.flushSync(() => {
+      hiddenControllerRef.current?.(indexes);
+    });
+    for (const position of indexes) {
+      const entry = registry.get(position);
+      cache.labels[position] = entry ? entry.getLabel() : null;
+      cache.disabled[position] = entry?.disabled ?? false;
+    }
+  });
 
-    // Labels and disabled states are built the first time something needs them, such as typeahead
-    // or selecting a range, so a list nobody types in never builds its labels.
-    const entries = renderedEntriesRef.current;
-    lazyLabels.resolve = () =>
-      Array.from(known, (data, index) => {
-        if (data) {
-          return data.label;
+  useIsoLayoutEffect(() => {
+    const { labelsRef: labelData, disabledItemsRef: disabledData } = store.context;
+    if (!hasCollection) {
+      labelData.setReader(null);
+      disabledData.setReader(null);
+      return;
+    }
+    const length = () => store.state.items?.length ?? 0;
+    labelData.setReader({
+      length,
+      get(index) {
+        const rendered = store.context.renderedItems.get(index);
+        if (rendered) {
+          return rendered.getLabel();
         }
-        const entry = entries.get(index);
-        return entry ? (entry.label ?? entry.element.textContent) : null;
-      });
-    lazyDisabled.resolve = () =>
-      Array.from(known, (data, index) => data?.disabled ?? entries.get(index)?.disabled ?? false);
-    lazyLabels.invalidate();
-    lazyDisabled.invalidate();
-  }, [hasCollection, items, groupInfos, store]);
+        readItem(index);
+        return readCacheRef.current.labels[index] ?? null;
+      },
+    });
+    disabledData.setReader({
+      length,
+      get(index) {
+        const rendered = store.context.renderedItems.get(index);
+        if (rendered) {
+          return rendered.disabled;
+        }
+        readItem(index);
+        return readCacheRef.current.disabled[index] ?? false;
+      },
+    });
+  }, [hasCollection, readItem, store]);
+
+  // Any render can change what the render functions return, so reads start fresh.
+  useIsoLayoutEffect(() => {
+    readCacheRef.current = {
+      labels: [],
+      disabled: [],
+      batchStart: -1,
+      batchEnd: -1,
+      batchSize: 0,
+    };
+  });
 
   const collection =
-    hiddenElements.length > 0 && fragment
+    hasCollection && fragment
       ? ReactDOM.createPortal(
-          <ListboxCollectionContext.Provider value={collectionValue}>
-            {hiddenElements}
-          </ListboxCollectionContext.Provider>,
+          <ListboxHiddenRoot
+            controllerRef={hiddenControllerRef}
+            registry={registry}
+            renderItem={renderHiddenItem}
+          />,
           fragment,
         )
       : null;
@@ -724,43 +758,6 @@ export const ListboxList = React.forwardRef(function ListboxList(
     </React.Fragment>
   );
 });
-
-/**
- * Reads an item's label and disabled state from its props, when the render function returns a
- * `Listbox.Item` whose label is its `label` prop or its text children.
- */
-function readItemData(element: React.ReactNode) {
-  if (!React.isValidElement(element) || element.type !== ListboxItem) {
-    return null;
-  }
-  const { label, disabled = false, children } = element.props as ListboxItem.Props;
-  if (label != null) {
-    return { label, disabled };
-  }
-  const text = readText(children);
-  return text == null ? null : { label: text, disabled };
-}
-
-function readText(children: React.ReactNode): string | null {
-  if (typeof children === 'string' || typeof children === 'number') {
-    return String(children);
-  }
-  if (children == null || typeof children === 'boolean') {
-    return '';
-  }
-  if (Array.isArray(children)) {
-    let text = '';
-    for (const child of children) {
-      const childText = readText(child);
-      if (childText == null) {
-        return null;
-      }
-      text += childText;
-    }
-    return text;
-  }
-  return null;
-}
 
 export interface ListboxListState {
   /**

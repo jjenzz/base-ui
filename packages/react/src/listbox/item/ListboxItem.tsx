@@ -137,10 +137,22 @@ const ListboxItemView = React.memo(function ListboxItemView(
     valuesRef,
   });
 
-  // With `range`, the listbox reads disabled states from every item instead.
   useIsoLayoutEffect(() => {
-    if (!hasRegistered || hasCollection) {
+    if (!hasRegistered) {
       return undefined;
+    }
+
+    // With `range`, the listbox reads a rendered item's data from here, and renders the items
+    // that aren't rendered when it needs theirs.
+    if (hasCollection) {
+      const { renderedItems } = store.context;
+      renderedItems.set(index, {
+        getLabel: () => label ?? itemRef.current?.textContent ?? null,
+        disabled: rootDisabled || disabled,
+      });
+      return () => {
+        renderedItems.delete(index);
+      };
     }
 
     const disabledItems = disabledItemsRef.current;
@@ -149,7 +161,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
     return () => {
       delete disabledItems[index];
     };
-  }, [disabled, disabledItemsRef, hasCollection, hasRegistered, index, rootDisabled]);
+  }, [disabled, disabledItemsRef, hasCollection, hasRegistered, index, label, rootDisabled, store]);
 
   // In a virtualized list, the list tracks whether the item holding the tab stop is rendered,
   // and takes its place in the tab order while it isn't.

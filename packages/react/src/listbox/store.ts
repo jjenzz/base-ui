@@ -2,8 +2,8 @@ import type * as React from 'react';
 import { ReactStore, createSelector } from '@base-ui/utils/store';
 import { compareItemEquality } from '../internals/itemEquality';
 import type { ListboxRoot } from './root/ListboxRoot';
-import { createLazyArrayRef } from './list/ListboxHiddenItems';
-import type { LazyArrayRef } from './list/ListboxHiddenItems';
+import { createItemDataRef } from './list/ListboxHiddenItems';
+import type { ItemDataRef, ListboxHiddenItemEntry } from './list/ListboxHiddenItems';
 
 export type State = {
   id: string | undefined;
@@ -43,8 +43,8 @@ export type State = {
 
 export type Context = {
   valuesRef: React.RefObject<Array<any>>;
-  labelsRef: LazyArrayRef<string | null>;
-  disabledItemsRef: LazyArrayRef<boolean | undefined>;
+  labelsRef: ItemDataRef<string | null>;
+  disabledItemsRef: ItemDataRef<boolean | undefined>;
   typingRef: React.RefObject<boolean>;
   lastSelectedIndexRef: React.RefObject<number | null>;
   setValue: (nextValue: any, eventDetails: ListboxRoot.ChangeEventDetails) => void;
@@ -59,6 +59,8 @@ export type Context = {
    * reading the data of items that aren't rendered.
    */
   itemTemplates: Map<number, (item: any, index: number) => React.ReactNode>;
+  /** How to read the label and disabled state of each rendered item, with `range`. */
+  renderedItems: Map<number, ListboxHiddenItemEntry>;
 };
 
 /**
@@ -193,8 +195,8 @@ function createInitialState(): State {
 function createInitialContext(): Context {
   return {
     valuesRef: { current: [] },
-    labelsRef: createLazyArrayRef(),
-    disabledItemsRef: createLazyArrayRef(),
+    labelsRef: createItemDataRef(),
+    disabledItemsRef: createItemDataRef(),
     typingRef: { current: false },
     lastSelectedIndexRef: { current: null },
     setValue: () => {},
@@ -202,5 +204,6 @@ function createInitialContext(): Context {
     pendingFocusIndexRef: { current: null },
     onItemFocus: () => {},
     itemTemplates: new Map(),
+    renderedItems: new Map(),
   };
 }

@@ -47,7 +47,7 @@ export function ListboxCollection(props: ListboxCollection.Props): React.JSX.Ele
     const index = offset + position;
     rendered.push(
       <ListboxItemIndexContext.Provider key={index} value={index}>
-        {children(source[position], index)}
+        {children(source[position], position)}
       </ListboxItemIndexContext.Provider>,
     );
   }
@@ -59,7 +59,8 @@ export interface ListboxCollectionState {}
 
 export interface ListboxCollectionProps {
   /**
-   * Renders one item, called with the item and its index in the whole list.
+   * Renders one item, called with the item and its index: within the enclosing `Listbox.Group`
+   * when it has `items`, otherwise in the whole list.
    */
   children: (item: any, index: number) => React.ReactNode;
 }
