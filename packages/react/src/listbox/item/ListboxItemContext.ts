@@ -9,9 +9,11 @@ export interface ListboxItemContext {
 
 export const ListboxItemContext = React.createContext<ListboxItemContext | undefined>(undefined);
 
-export function useListboxItemContext() {
+export function useListboxItemContext(): ListboxItemContext;
+export function useListboxItemContext(optional: boolean): ListboxItemContext | undefined;
+export function useListboxItemContext(optional = false) {
   const context = React.useContext(ListboxItemContext);
-  if (!context) {
+  if (!context && !optional) {
     throw new Error(
       'Base UI: ListboxItemContext is missing. ListboxItem parts must be placed within <Listbox.Item>.',
     );

@@ -1,53 +1,55 @@
 'use client';
 import * as React from 'react';
-import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
-import { useListboxRootContext } from '../root/ListboxRootContext';
-import { ListboxItemContext } from '../item/ListboxItemContext';
-import type { ListboxItem } from '../item/ListboxItem';
 
 /**
  * The position of the item being rendered by `Listbox.List`'s render function.
  */
 export const ListboxItemIndexContext = React.createContext<number | undefined>(undefined);
 
+export interface ListboxCollection {
+  /**
+   * Records an item's label and disabled state, or forgets them when `element` is `null`.
+   */
+  record: (
+    element: HTMLElement | null,
+    index: number,
+    label: string | undefined,
+    disabled: boolean,
+  ) => void;
+}
+
 /**
- * Whether `Listbox.Item` renders into the hidden collection, which records every item's label
- * and disabled state so the listbox knows them for items that aren't rendered.
+ * Present while `Listbox.Item` renders into the hidden copy of every item, which records each
+ * label and disabled state so the listbox knows them for items that aren't rendered.
  */
-export const ListboxCollectionContext = React.createContext(false);
-
-const COLLECTION_ITEM_CONTEXT: ListboxItemContext = {
-  selected: false,
-  indexRef: { current: -1 },
-  hasRegistered: false,
-};
+export const ListboxCollectionContext = React.createContext<ListboxCollection | null>(null);
 
 /**
- * `Listbox.Item` inside the hidden collection. Records the item's label and disabled state.
+ * A stable key for each item, so an item keeps its rendered element when other items are added,
+ * removed or moved. Object items get a generated key; primitive items are keyed by their value.
+ * Duplicates get a suffix.
  */
-export function ListboxCollectionItem(props: ListboxItem.Props) {
-  const { label, disabled = false, children } = props;
-  const index = React.useContext(ListboxItemIndexContext) ?? -1;
-  const store = useListboxRootContext();
-  const textRef = React.useRef<HTMLSpanElement>(null);
+export function createItemKeys() {
+  const objectKeys = new WeakMap<object, string>();
+  let nextKey = 0;
 
-  useIsoLayoutEffect(() => {
-    if (index === -1) {
-      return undefined;
-    }
-    const labels = store.context.labelsRef.current;
-    const disabledItems = store.context.disabledItemsRef.current;
-    labels[index] = label ?? textRef.current?.textContent ?? null;
-    disabledItems[index] = disabled;
-    return () => {
-      delete labels[index];
-      delete disabledItems[index];
-    };
-  }, [disabled, index, label, store]);
-
-  return (
-    <ListboxItemContext.Provider value={COLLECTION_ITEM_CONTEXT}>
-      <span ref={textRef}>{children}</span>
-    </ListboxItemContext.Provider>
-  );
+  return function getKeys(items: readonly any[]): string[] {
+    const seen = new Map<string, number>();
+    return items.map((item) => {
+      let key: string;
+      if ((typeof item === 'object' && item !== null) || typeof item === 'function') {
+        key = objectKeys.get(item) ?? '';
+        if (!key) {
+          key = `o${nextKey}`;
+          nextKey += 1;
+          objectKeys.set(item, key);
+        }
+      } else {
+        key = `${typeof item}:${String(item)}`;
+      }
+      const count = seen.get(key) ?? 0;
+      seen.set(key, count + 1);
+      return count === 0 ? key : `${key}#${count}`;
+    });
+  };
 }

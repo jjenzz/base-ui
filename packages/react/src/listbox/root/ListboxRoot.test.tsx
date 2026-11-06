@@ -2625,6 +2625,27 @@ describe('<Listbox.Root />', () => {
       );
     });
 
+    it('updates the labels and disabled states of items that move when items are added', async () => {
+      const handleValueChange = vi.fn();
+      const { setProps } = await render(
+        <VirtualList multiple disabledItems={['New 1']} onValueChange={handleValueChange} />,
+      );
+      await setProps({ items: ['New 0', 'New 1', ...ALL_ITEMS] });
+
+      await act(async () => screen.getByRole('option', { name: 'New 0' }).focus());
+      for (const key of 'item 50') {
+        fireEvent.keyDown(document.activeElement as HTMLElement, { key });
+        // eslint-disable-next-line no-await-in-loop
+        await flushMicrotasks();
+      }
+      expect(screen.getByRole('option', { name: 'Item 50' })).toHaveFocus();
+
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'a', ctrlKey: true });
+      await flushMicrotasks();
+      expect(handleValueChange).toHaveBeenCalledTimes(1);
+      expect(handleValueChange.mock.calls[0][0]).toEqual(['New 0', ...ALL_ITEMS]);
+    });
+
     it('moves focus to a selected item that is not rendered when tabbing in', async () => {
       const { user } = await render(<VirtualList defaultValue="Item 50" />);
       expect(screen.queryByRole('option', { name: 'Item 50' })).toBe(null);
