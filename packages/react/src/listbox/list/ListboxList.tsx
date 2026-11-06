@@ -1,7 +1,9 @@
 'use client';
 import * as React from 'react';
+import * as ReactDOM from 'react-dom';
 import { platform } from '@base-ui/utils/platform';
 import { useStableCallback } from '@base-ui/utils/useStableCallback';
+import { useRefWithInit } from '@base-ui/utils/useRefWithInit';
 import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
 import { areArraysEqual } from '@base-ui/utils/areArraysEqual';
@@ -21,6 +23,7 @@ import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { selectionReducer } from '../utils/selectionReducer';
 import type { SelectionAction } from '../utils/selectionReducer';
+import { ListboxCollectionContext, ListboxItemIndexContext } from './ListboxCollection';
 
 /**
  * A container for the listbox items.
@@ -32,7 +35,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
   componentProps: ListboxList.Props,
   forwardedRef: React.ForwardedRef<HTMLDivElement>,
 ) {
-  const { className, render, style, ...elementProps } = componentProps;
+  const { className, render, style, children, ...elementProps } = componentProps;
 
   const store = useListboxRootContext();
 
@@ -43,6 +46,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
   const disabled = store.useState('disabled');
   const multiple = store.useState('multiple');
   const items = store.useState('items');
+  const indexes = store.useState('indexes');
   // With `items`, the list knows every item, including those that aren't rendered.
   const itemCount = items?.length;
   const activeItemRendered = store.useState('activeItemRendered');
@@ -551,23 +555,74 @@ export const ListboxList = React.forwardRef(function ListboxList(
     }
   }, [value, store, getTabStopIndex]);
 
+  // With `items`, the children render one item, and the list renders each item it shows: every
+  // item, or only those at `indexes`, in order.
+  let content: React.ReactNode;
+  if (typeof children === 'function') {
+    if (items) {
+      const renderItem = (index: number) => (
+        <ListboxItemIndexContext.Provider key={index} value={index}>
+          {children(items[index], index)}
+        </ListboxItemIndexContext.Provider>
+      );
+      content = indexes
+        ? [...indexes]
+            .filter((index) => index >= 0 && index < items.length)
+            .sort((a, b) => a - b)
+            .map(renderItem)
+        : items.map((_, index) => renderItem(index));
+    }
+  } else {
+    content = children;
+  }
+
+  // With `indexes`, a hidden copy of every item renders into a detached fragment and records each
+  // label and disabled state, so selection and typeahead know the items that aren't rendered. It
+  // renders again only when the items change, so a render function that depends on other state
+  // only takes effect in the hidden copy when the items change.
+  const templateRef = React.useRef(children);
+  templateRef.current = children;
+  const fragment = useRefWithInit(() =>
+    typeof document === 'undefined' ? null : document.createDocumentFragment(),
+  ).current;
+  const hasCollection = indexes != null;
+  const collection = React.useMemo(() => {
+    const template = templateRef.current;
+    if (!hasCollection || !items || !fragment || typeof template !== 'function') {
+      return null;
+    }
+    return ReactDOM.createPortal(
+      <ListboxCollectionContext.Provider value>
+        {items.map((item, index) => (
+          <ListboxItemIndexContext.Provider key={index} value={index}>
+            {template(item, index)}
+          </ListboxItemIndexContext.Provider>
+        ))}
+      </ListboxCollectionContext.Provider>,
+      fragment,
+    );
+  }, [hasCollection, items, fragment]);
+
   const element = useRenderElement('div', componentProps, {
     ref: [forwardedRef, setListElement, composite.props.ref],
     state,
-    props: [defaultProps, elementProps],
+    props: [defaultProps, elementProps, { children: content }],
   });
 
   // Use composite's elementsRef for the CompositeList so that keyboard navigation
   // and item registration share the same ref.
   return (
-    <CompositeList
-      elementsRef={composite.elementsRef}
-      // With `items`, the labels come from the items rather than the rendered text.
-      labelsRef={items ? undefined : labelsRef}
-      onMapChange={onMapChange}
-    >
-      {element}
-    </CompositeList>
+    <React.Fragment>
+      {collection}
+      <CompositeList
+        elementsRef={composite.elementsRef}
+        // With `indexes`, the hidden copy records the labels instead of the rendered items.
+        labelsRef={hasCollection ? undefined : labelsRef}
+        onMapChange={onMapChange}
+      >
+        {element}
+      </CompositeList>
+    </React.Fragment>
   );
 });
 
@@ -582,7 +637,16 @@ export interface ListboxListState {
   orientation: 'vertical' | 'horizontal';
 }
 
-export interface ListboxListProps extends BaseUIComponentProps<'div', ListboxListState> {}
+export interface ListboxListProps extends Omit<
+  BaseUIComponentProps<'div', ListboxListState>,
+  'children'
+> {
+  /**
+   * The items. With `items` on `Listbox.Root`, a function that renders one item, called with
+   * the item and its index.
+   */
+  children?: React.ReactNode | ((item: any, index: number) => React.ReactNode);
+}
 
 export namespace ListboxList {
   export type Props = ListboxListProps;

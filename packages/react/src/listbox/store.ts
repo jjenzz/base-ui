@@ -24,6 +24,8 @@ export type State = {
    * Every item, including those that aren't rendered, when they're passed to `Listbox.Root`.
    */
   items: readonly any[] | undefined;
+  /** The positions of the rendered items, when the list renders only some of them. */
+  indexes: readonly number[] | undefined;
   /** Whether the item that holds the tab stop is rendered. */
   activeItemRendered: boolean;
 
@@ -86,6 +88,8 @@ export const selectors = {
 
   listElement: createSelector((state: State) => state.listElement),
   items: createSelector((state: State) => state.items),
+  indexes: createSelector((state: State) => state.indexes),
+  hasCollection: createSelector((state: State) => state.indexes != null),
   activeItemRendered: createSelector((state: State) => state.activeItemRendered),
 
   orientation: createSelector((state: State) => state.orientation),
@@ -166,6 +170,7 @@ function createInitialState(): State {
     itemFocused: false,
     hoveredIndex: null,
     items: undefined,
+    indexes: undefined,
     activeItemRendered: false,
     listElement: null,
     orientation: 'vertical',

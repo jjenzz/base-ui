@@ -21,6 +21,11 @@ import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
 import { selectionReducer } from '../utils/selectionReducer';
+import {
+  ListboxCollectionContext,
+  ListboxCollectionItem,
+  ListboxItemIndexContext,
+} from '../list/ListboxCollection';
 import type { SelectionAction } from '../utils/selectionReducer';
 
 function useListItemValueRegistration(params: {
@@ -56,6 +61,18 @@ export const ListboxItem = React.memo(
     componentProps: ListboxItem.Props,
     forwardedRef: React.ForwardedRef<HTMLElement>,
   ) {
+    // The hidden copy of every item only records labels and disabled states.
+    if (React.useContext(ListboxCollectionContext)) {
+      return <ListboxCollectionItem {...componentProps} />;
+    }
+    return <ListboxItemElement {...componentProps} ref={forwardedRef} />;
+  }),
+);
+
+const ListboxItemElement = React.forwardRef(function ListboxItemElement(
+    componentProps: ListboxItem.Props,
+    forwardedRef: React.ForwardedRef<HTMLElement>,
+  ) {
     const {
       render,
       className,
@@ -69,19 +86,24 @@ export const ListboxItem = React.memo(
 
     const store = useListboxRootContext();
     const items = store.useState('items');
+    const hasCollection = store.useState('hasCollection');
     const isItemEqualToValue = store.useState('isItemEqualToValue');
 
-    // With `items`, the item's position comes from its value, since a virtualized list renders
-    // only some of the items and their order in the DOM doesn't match their position.
+    // With `items`, `Listbox.List` renders each item and passes its position, since a virtualized
+    // list renders only some of the items and their order in the DOM doesn't match their position.
+    const indexFromList = React.useContext(ListboxItemIndexContext);
     const indexFromItems = React.useMemo(
-      () => (items ? findItemIndex(items, itemValue, isItemEqualToValue) : undefined),
-      [items, itemValue, isItemEqualToValue],
+      () =>
+        indexFromList === undefined && items
+          ? findItemIndex(items, itemValue, isItemEqualToValue)
+          : undefined,
+      [indexFromList, items, itemValue, isItemEqualToValue],
     );
 
     const listItem = useCompositeListItem({
       guess: true,
       label,
-      index: indexFromItems,
+      index: indexFromList ?? indexFromItems,
     });
 
     const multiple = store.useState('multiple');
@@ -106,8 +128,9 @@ export const ListboxItem = React.memo(
       valuesRef,
     });
 
+    // With `indexes`, the hidden copy of every item records disabled states instead.
     useIsoLayoutEffect(() => {
-      if (!hasRegistered) {
+      if (!hasRegistered || hasCollection) {
         return undefined;
       }
 
@@ -117,7 +140,7 @@ export const ListboxItem = React.memo(
       return () => {
         delete disabledItems[index];
       };
-    }, [disabled, disabledItemsRef, hasRegistered, index, rootDisabled]);
+    }, [disabled, disabledItemsRef, hasCollection, hasRegistered, index, rootDisabled]);
 
     // In a virtualized list, the list tracks whether the item holding the tab stop is rendered,
     // and takes its place in the tab order while it isn't.
@@ -353,8 +376,7 @@ export const ListboxItem = React.memo(
     return (
       <ListboxItemContext.Provider value={contextValue}>{element}</ListboxItemContext.Provider>
     );
-  }),
-);
+  });
 
 export interface ListboxItemState {
   /**

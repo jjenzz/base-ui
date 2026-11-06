@@ -13,7 +13,6 @@ import type {
 import type { REASONS } from '../../internals/reasons';
 import { useBaseUiId } from '../../internals/useBaseUiId';
 import { defaultItemEquality } from '../../internals/itemEquality';
-import { stringifyAsLabel } from '../../internals/resolveValueLabel';
 import { ListboxRootContext } from './ListboxRootContext';
 import { ListboxStore } from '../store';
 import { useHighlightChangeNotifier } from '../utils/useHighlightChangeNotifier';
@@ -38,7 +37,7 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     isItemEqualToValue = defaultItemEquality,
     onItemHighlighted,
     items,
-    itemToStringLabel,
+    indexes,
     children,
   } = props;
 
@@ -80,6 +79,7 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
           disabled,
           highlightItemOnHover,
           items,
+          indexes,
         },
         {
           valuesRef,
@@ -123,6 +123,7 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
       disabled,
       highlightItemOnHover,
       items,
+      indexes,
     });
   }, [
     store,
@@ -134,17 +135,17 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     disabled,
     highlightItemOnHover,
     items,
+    indexes,
   ]);
 
-  // With `items`, the listbox knows every item, including those that aren't rendered, so
-  // selection, typeahead and the tab stop work across the whole list.
+  // With `items`, the listbox knows every value, including those that aren't rendered. With
+  // `indexes`, `Listbox.List` records their labels and disabled states too.
   useIsoLayoutEffect(() => {
     if (!items) {
       return;
     }
     valuesRef.current = items as any[];
-    labelsRef.current = items.map((item) => stringifyAsLabel(item, itemToStringLabel));
-  }, [items, itemToStringLabel]);
+  }, [items]);
 
   useHighlightChangeNotifier<Value>({
     store,
@@ -234,17 +235,17 @@ export interface ListboxRootProps<Value, Multiple extends boolean | 'opt-in' | u
     | undefined;
   /**
    * The items in the list, including those that aren't rendered.
-   * Pass them when the list is virtualized, and use each item as its `Listbox.Item` value.
+   * Pass them with a render function as the `Listbox.List` children, which renders each item.
    * Keyboard navigation, typeahead and selection can then reach items that aren't rendered.
    */
   items?: readonly Value[] | undefined;
   /**
-   * When the item values are objects (`<Listbox.Item value={object}>`), this function converts the
-   * object value to a string representation for typeahead.
-   * If the shape of the object is `{ value, label }`, the label will be used automatically without
-   * needing to specify this prop.
+   * The positions of the items to render, such as the rows a virtualizer shows, including overscan
+   * and pinned rows. `Listbox.List` renders them in order, and keeps a hidden copy of every item
+   * so it knows the labels and disabled states of items that aren't rendered.
+   * Requires `items` and a render function as the `Listbox.List` children.
    */
-  itemToStringLabel?: ((itemValue: Value) => string) | undefined;
+  indexes?: readonly number[] | undefined;
 }
 
 export interface ListboxRootState {}

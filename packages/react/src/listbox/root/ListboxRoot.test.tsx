@@ -2376,11 +2376,13 @@ describe('<Listbox.Root />', () => {
       props: Listbox.Root.Props<string, boolean | 'opt-in'> & {
         start?: number;
         follow?: boolean;
+        disabledItems?: string[];
       },
     ) {
       const {
         start: startProp = 0,
         follow = true,
+        disabledItems = [],
         items = ALL_ITEMS,
         onItemHighlighted,
         ...rootProps
@@ -2390,7 +2392,10 @@ describe('<Listbox.Root />', () => {
         setStart(startProp);
       }, [startProp]);
 
-      const rendered = items.slice(start, start + WINDOW_SIZE);
+      const indexes = Array.from(
+        { length: Math.min(WINDOW_SIZE, items.length - start) },
+        (_, offset) => start + offset,
+      );
 
       return (
         <div>
@@ -2398,6 +2403,7 @@ describe('<Listbox.Root />', () => {
           <Listbox.Root
             {...rootProps}
             items={items}
+            indexes={indexes}
             onItemHighlighted={(itemValue, eventDetails) => {
               onItemHighlighted?.(itemValue, eventDetails);
               const { index } = eventDetails;
@@ -2407,11 +2413,11 @@ describe('<Listbox.Root />', () => {
             }}
           >
             <Listbox.List>
-              {rendered.map((item) => (
-                <Listbox.Item key={item} value={item}>
+              {(item: string) => (
+                <Listbox.Item value={item} disabled={disabledItems.includes(item)}>
                   {item}
                 </Listbox.Item>
-              ))}
+              )}
             </Listbox.List>
           </Listbox.Root>
           <button>After</button>
@@ -2600,6 +2606,23 @@ describe('<Listbox.Root />', () => {
       }
 
       expect(screen.getByRole('option', { name: 'Item 50' })).toHaveFocus();
+    });
+
+    it('skips disabled items that are not rendered when selecting all', async () => {
+      const handleValueChange = vi.fn();
+      await render(
+        <VirtualList multiple disabledItems={['Item 50']} onValueChange={handleValueChange} />,
+      );
+      expect(screen.queryByRole('option', { name: 'Item 50' })).toBe(null);
+
+      await act(async () => screen.getByRole('option', { name: 'Item 0' }).focus());
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'a', ctrlKey: true });
+      await flushMicrotasks();
+
+      expect(handleValueChange).toHaveBeenCalledTimes(1);
+      expect(handleValueChange.mock.calls[0][0]).toEqual(
+        ALL_ITEMS.filter((item) => item !== 'Item 50'),
+      );
     });
 
     it('moves focus to a selected item that is not rendered when tabbing in', async () => {
