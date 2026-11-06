@@ -23,8 +23,13 @@ import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { selectionReducer } from '../utils/selectionReducer';
 import type { SelectionAction } from '../utils/selectionReducer';
-import { ListboxCollectionContext, ListboxItemIndexContext } from './ListboxCollection';
-import type { ListboxCollection } from './ListboxCollection';
+import {
+  ListboxCollectionContext,
+  ListboxItemIndexContext,
+  ListboxListGroupContext,
+} from './ListboxHiddenItems';
+import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
+import type { ListboxCollection } from './ListboxHiddenItems';
 import { ListboxItem } from '../item/ListboxItem';
 
 /**
@@ -48,7 +53,8 @@ export const ListboxList = React.forwardRef(function ListboxList(
   const disabled = store.useState('disabled');
   const multiple = store.useState('multiple');
   const items = store.useState('items');
-  const indexes = store.useState('indexes');
+  const itemGroups = store.useState('itemGroups');
+  const range = store.useState('range');
   // With `items`, the list knows every item, including those that aren't rendered.
   const itemCount = items?.length;
   const activeItemRendered = store.useState('activeItemRendered');
@@ -557,33 +563,45 @@ export const ListboxList = React.forwardRef(function ListboxList(
     }
   }, [value, store, getTabStopIndex]);
 
-  // With `items`, the children render one item, and the list renders each item it shows: every
-  // item, or only those at `indexes`, in order.
+  // Each group's position and the position of its first item in the whole list.
+  const groupInfos = React.useMemo(() => {
+    if (!itemGroups) {
+      return undefined;
+    }
+    let offset = 0;
+    return itemGroups.map((group, index) => {
+      const info = { index, offset, size: group.items.length };
+      offset += group.items.length;
+      return info;
+    });
+  }, [itemGroups]);
+
+  // With `items`, the children render one item, or one group when the items are grouped. Only the
+  // groups with items in `range` render.
   let content: React.ReactNode;
   if (typeof children === 'function') {
-    if (items) {
-      const renderItem = (index: number) => (
-        <ListboxItemIndexContext.Provider key={index} value={index}>
-          {children(items[index], index)}
-        </ListboxItemIndexContext.Provider>
-      );
-      content = indexes
-        ? [...indexes]
-            .filter((index) => index >= 0 && index < items.length)
-            .sort((a, b) => a - b)
-            .map(renderItem)
-        : items.map((_, index) => renderItem(index));
+    if (itemGroups && groupInfos) {
+      content = groupInfos
+        .filter(
+          (info) =>
+            !range || (info.offset <= range.end && info.offset + info.size - 1 >= range.start),
+        )
+        .map((info) => (
+          <ListboxListGroupContext.Provider key={info.index} value={info}>
+            {children(itemGroups[info.index], info.index)}
+          </ListboxListGroupContext.Provider>
+        ));
+    } else {
+      content = <ListboxCollectionPart>{children}</ListboxCollectionPart>;
     }
   } else {
     content = children;
   }
 
-  // With `indexes`, a hidden copy of every item renders into a detached fragment and records each
-  // label and disabled state by position, so selection and typeahead know the items that aren't
-  // rendered. It renders again when the items change, and then each hidden item renders again only
-  // if its label, disabled state or text changed.
-  const templateRef = React.useRef(children);
-  templateRef.current = children;
+  // With `range`, the listbox reads the labels and disabled states of the items that aren't
+  // rendered by calling each `Listbox.Collection` render function for every item when the items
+  // change. A `Listbox.Item` with a `label` or text children has its data in its props, so it
+  // doesn't render. Only the rest render into a hidden copy in a detached fragment.
   const fragment = useRefWithInit(() =>
     typeof document === 'undefined' ? null : document.createDocumentFragment(),
   ).current;
@@ -605,19 +623,44 @@ export const ListboxList = React.forwardRef(function ListboxList(
       store.context.disabledItemsRef.invalidate();
     },
   })).current;
-  const hasCollection = indexes != null;
+  const hasCollection = range != null;
+  const [hiddenElements, setHiddenElements] = React.useState<React.ReactNode[]>(EMPTY_ARRAY);
 
-  // With `indexes`, the render function runs for every item when the items change. A
-  // `Listbox.Item` with a `label` or text children has its data in its props, so it doesn't render.
-  // Only the rest render into the hidden copy.
-  const hiddenItems = React.useMemo(() => {
-    const template = templateRef.current;
-    if (!hasCollection || !items || typeof template !== 'function') {
-      return null;
+  // Runs after the `Listbox.Collection` parts have committed, since in a grouped list their render
+  // functions only exist once they've rendered.
+  useIsoLayoutEffect(() => {
+    const { labelsRef: lazyLabels, disabledItemsRef: lazyDisabled, itemTemplates } = store.context;
+    if (!hasCollection || !items) {
+      lazyLabels.resolve = null;
+      lazyDisabled.resolve = null;
+      setHiddenElements(EMPTY_ARRAY);
+      return;
     }
+
+    // A group that isn't rendered uses the render function of a group that is.
+    let fallbackTemplate: ((item: any, index: number) => React.ReactNode) | undefined;
+    itemTemplates.forEach((template) => {
+      fallbackTemplate = template;
+    });
+
     const known: Array<{ label: string; disabled: boolean } | undefined> = new Array(items.length);
     const rendered: React.ReactNode[] = [];
+    let groupPosition = 0;
     for (let index = 0; index < items.length; index += 1) {
+      let groupIndex = -1;
+      if (groupInfos) {
+        while (
+          groupPosition < groupInfos.length - 1 &&
+          index >= groupInfos[groupPosition].offset + groupInfos[groupPosition].size
+        ) {
+          groupPosition += 1;
+        }
+        groupIndex = groupPosition;
+      }
+      const template = itemTemplates.get(groupIndex) ?? fallbackTemplate;
+      if (!template) {
+        continue;
+      }
       const element = template(items[index], index);
       const data = readItemData(element);
       if (data) {
@@ -630,31 +673,10 @@ export const ListboxList = React.forwardRef(function ListboxList(
         );
       }
     }
-    return { known, rendered };
-  }, [hasCollection, items]);
+    setHiddenElements(rendered.length > 0 ? rendered : EMPTY_ARRAY);
 
-  const collection = React.useMemo(() => {
-    if (!hiddenItems || hiddenItems.rendered.length === 0 || !fragment) {
-      return null;
-    }
-    return ReactDOM.createPortal(
-      <ListboxCollectionContext.Provider value={collectionValue}>
-        {hiddenItems.rendered}
-      </ListboxCollectionContext.Provider>,
-      fragment,
-    );
-  }, [hiddenItems, fragment, collectionValue]);
-
-  // Labels and disabled states are built the first time something needs them, such as typeahead
-  // or selecting a range, so a list nobody types in never builds its labels.
-  useIsoLayoutEffect(() => {
-    const { labelsRef: lazyLabels, disabledItemsRef: lazyDisabled } = store.context;
-    if (!hiddenItems) {
-      lazyLabels.resolve = null;
-      lazyDisabled.resolve = null;
-      return;
-    }
-    const { known } = hiddenItems;
+    // Labels and disabled states are built the first time something needs them, such as typeahead
+    // or selecting a range, so a list nobody types in never builds its labels.
     const entries = renderedEntriesRef.current;
     lazyLabels.resolve = () =>
       Array.from(known, (data, index) => {
@@ -668,7 +690,17 @@ export const ListboxList = React.forwardRef(function ListboxList(
       Array.from(known, (data, index) => data?.disabled ?? entries.get(index)?.disabled ?? false);
     lazyLabels.invalidate();
     lazyDisabled.invalidate();
-  }, [hiddenItems, store]);
+  }, [hasCollection, items, groupInfos, store]);
+
+  const collection =
+    hiddenElements.length > 0 && fragment
+      ? ReactDOM.createPortal(
+          <ListboxCollectionContext.Provider value={collectionValue}>
+            {hiddenElements}
+          </ListboxCollectionContext.Provider>,
+          fragment,
+        )
+      : null;
 
   const element = useRenderElement('div', componentProps, {
     ref: [forwardedRef, setListElement, composite.props.ref],
@@ -683,7 +715,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
       {collection}
       <CompositeList
         elementsRef={composite.elementsRef}
-        // With `indexes`, the hidden copy records the labels instead of the rendered items.
+        // With `range`, the labels come from every item instead of the rendered ones.
         labelsRef={hasCollection ? undefined : labelsRef}
         onMapChange={onMapChange}
       >
@@ -747,7 +779,7 @@ export interface ListboxListProps extends Omit<
 > {
   /**
    * The items. With `items` on `Listbox.Root`, a function that renders one item, called with
-   * the item and its index.
+   * the item and its index, or one group when the items are grouped.
    */
   children?: React.ReactNode | ((item: any, index: number) => React.ReactNode);
 }

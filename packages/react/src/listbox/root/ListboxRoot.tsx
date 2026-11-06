@@ -15,7 +15,8 @@ import { useBaseUiId } from '../../internals/useBaseUiId';
 import { defaultItemEquality } from '../../internals/itemEquality';
 import { ListboxRootContext } from './ListboxRootContext';
 import { ListboxStore } from '../store';
-import { createLazyArrayRef } from '../list/ListboxCollection';
+import { createLazyArrayRef } from '../list/ListboxHiddenItems';
+import { flattenLeafItems, isGroupedItems } from '../../internals/resolveValueLabel';
 import { useHighlightChangeNotifier } from '../utils/useHighlightChangeNotifier';
 
 /**
@@ -37,12 +38,22 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     highlightItemOnHover = true,
     isItemEqualToValue = defaultItemEquality,
     onItemHighlighted,
-    items,
-    indexes,
+    items: itemsProp,
+    range,
     children,
   } = props;
 
   const generatedId = useBaseUiId();
+
+  // Grouped items (`{ items: [...] }` objects) are flattened, so positions count items across
+  // every group.
+  const itemGroups = isGroupedItems(itemsProp as any)
+    ? (itemsProp as unknown as ReadonlyArray<{ items: readonly Value[] }>)
+    : undefined;
+  const items = React.useMemo(
+    () => (itemsProp ? (flattenLeafItems(itemsProp as any) as readonly Value[]) : undefined),
+    [itemsProp],
+  );
 
   const multiple = multipleProp !== false;
 
@@ -80,7 +91,8 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
           disabled,
           highlightItemOnHover,
           items,
-          indexes,
+          itemGroups,
+          range,
         },
         {
           valuesRef,
@@ -124,7 +136,8 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
       disabled,
       highlightItemOnHover,
       items,
-      indexes,
+      itemGroups,
+      range,
     });
   }, [
     store,
@@ -136,11 +149,12 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     disabled,
     highlightItemOnHover,
     items,
-    indexes,
+    itemGroups,
+    range,
   ]);
 
   // With `items`, the listbox knows every value, including those that aren't rendered. With
-  // `indexes`, `Listbox.List` records their labels and disabled states too.
+  // `range`, `Listbox.List` reads their labels and disabled states too.
   useIsoLayoutEffect(() => {
     if (!items) {
       return;
@@ -237,16 +251,19 @@ export interface ListboxRootProps<Value, Multiple extends boolean | 'opt-in' | u
   /**
    * The items in the list, including those that aren't rendered.
    * Pass them with a render function as the `Listbox.List` children, which renders each item.
+   * For groups, pass objects with an `items` array: the `Listbox.List` render function then
+   * renders each group, and `Listbox.Collection` inside `Listbox.Group` renders its items.
    * Keyboard navigation, typeahead and selection can then reach items that aren't rendered.
    */
-  items?: readonly Value[] | undefined;
+  items?: readonly Value[] | ReadonlyArray<{ items: readonly Value[] }> | undefined;
   /**
-   * The positions of the items to render, such as the rows a virtualizer shows, including overscan
-   * and pinned rows. `Listbox.List` renders them in order, and keeps a hidden copy of every item
-   * so it knows the labels and disabled states of items that aren't rendered.
-   * Requires `items` and a render function as the `Listbox.List` children.
+   * The first and last items to render, such as the rows a virtualizer shows, including overscan.
+   * Positions count items across every group, and `end` is inclusive.
+   * The listbox still knows the labels and disabled states of the items outside the range, for
+   * keyboard navigation, typeahead and selection.
+   * Requires `items` and a render function as the `Listbox.List` or `Listbox.Collection` children.
    */
-  indexes?: readonly number[] | undefined;
+  range?: { start: number; end: number } | undefined;
 }
 
 export interface ListboxRootState {}

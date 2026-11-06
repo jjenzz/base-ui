@@ -7,6 +7,14 @@ import * as React from 'react';
 export const ListboxItemIndexContext = React.createContext<number | undefined>(undefined);
 
 /**
+ * The group being rendered by `Listbox.List`'s render function, with the position of its first
+ * item in the whole list.
+ */
+export const ListboxListGroupContext = React.createContext<
+  { index: number; offset: number } | undefined
+>(undefined);
+
+/**
  * A ref to a list of item data, such as labels, that can be built the first time it's read.
  * Without `resolve`, it's a plain ref that parts write into.
  */

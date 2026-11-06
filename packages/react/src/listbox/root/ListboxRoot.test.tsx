@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Listbox } from '@base-ui/react/listbox';
 import { DirectionProvider } from '@base-ui/react/direction-provider';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { act, fireEvent, flushMicrotasks, screen, waitFor } from '@mui/internal-test-utils';
+import { act, fireEvent, flushMicrotasks, screen, waitFor, within } from '@mui/internal-test-utils';
 import { createRenderer, isJSDOM } from '#test-utils';
 
 describe('<Listbox.Root />', () => {
@@ -2394,10 +2394,6 @@ describe('<Listbox.Root />', () => {
         setStart(startProp);
       }, [startProp]);
 
-      const indexes = Array.from(
-        { length: Math.min(WINDOW_SIZE, items.length - start) },
-        (_, offset) => start + offset,
-      );
 
       return (
         <div>
@@ -2405,7 +2401,7 @@ describe('<Listbox.Root />', () => {
           <Listbox.Root
             {...rootProps}
             items={items}
-            indexes={indexes}
+            range={{ start, end: Math.min(start + WINDOW_SIZE, items.length) - 1 }}
             onItemHighlighted={(itemValue, eventDetails) => {
               onItemHighlighted?.(itemValue, eventDetails);
               const { index } = eventDetails;
@@ -2670,6 +2666,102 @@ describe('<Listbox.Root />', () => {
       await flushMicrotasks();
 
       expect(screen.getByRole('option', { name: 'Item 50' })).toHaveFocus();
+    });
+  });
+
+  describe('prop: items (grouped)', () => {
+    interface ProduceGroup {
+      name: string;
+      items: string[];
+    }
+    const GROUPS: ProduceGroup[] = [
+      { name: 'Fruits', items: ['Apple', 'Banana', 'Cherry'] },
+      { name: 'Vegetables', items: ['Carrot', 'Leek', 'Pea'] },
+      { name: 'Grains', items: ['Oat', 'Rice', 'Wheat'] },
+    ];
+    const ALL_PRODUCE = GROUPS.flatMap((group) => group.items);
+
+    // Renders a window of 2 items, like a virtualizer, and moves it to the highlighted item.
+    function GroupedList(
+      props: Listbox.Root.Props<string, boolean | 'opt-in'> & { disabledItems?: string[] },
+    ) {
+      const { disabledItems = [], ...rootProps } = props;
+      const size = 2;
+      const [start, setStart] = React.useState(0);
+
+      return (
+        <Listbox.Root
+          {...rootProps}
+          items={GROUPS}
+          range={{ start, end: start + size - 1 }}
+          onItemHighlighted={(_, { index }) => {
+            if (index !== -1 && (index < start || index >= start + size)) {
+              setStart(Math.min(index, ALL_PRODUCE.length - size));
+            }
+          }}
+        >
+          <Listbox.List aria-label="Produce">
+            {(group: ProduceGroup) => (
+              <Listbox.Group items={group.items}>
+                <Listbox.GroupLabel>{group.name}</Listbox.GroupLabel>
+                <Listbox.Collection>
+                  {(item: string) => (
+                    <Listbox.Item value={item} disabled={disabledItems.includes(item)}>
+                      {item}
+                    </Listbox.Item>
+                  )}
+                </Listbox.Collection>
+              </Listbox.Group>
+            )}
+          </Listbox.List>
+        </Listbox.Root>
+      );
+    }
+
+    it('renders only the groups with items in the range, each wrapping its items', async () => {
+      await render(<GroupedList />);
+
+      const groups = screen.getAllByRole('group');
+      expect(groups).toHaveLength(1);
+      expect(groups[0]).toHaveAccessibleName('Fruits');
+      expect(
+        within(groups[0])
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Apple', 'Banana']);
+    });
+
+    it('moves focus to a typeahead match in a group that is not rendered', async () => {
+      await render(<GroupedList />);
+      expect(screen.queryByRole('group', { name: 'Grains' })).toBe(null);
+
+      await act(async () => screen.getByRole('option', { name: 'Apple' }).focus());
+      for (const key of 'ri') {
+        fireEvent.keyDown(document.activeElement as HTMLElement, { key });
+        // eslint-disable-next-line no-await-in-loop
+        await flushMicrotasks();
+      }
+
+      const rice = screen.getByRole('option', { name: 'Rice' });
+      expect(rice).toHaveFocus();
+      expect(screen.getByRole('group', { name: 'Grains' })).toContainElement(rice);
+    });
+
+    it('skips disabled items in groups that are not rendered when selecting all', async () => {
+      const handleValueChange = vi.fn();
+      await render(
+        <GroupedList multiple disabledItems={['Pea']} onValueChange={handleValueChange} />,
+      );
+      expect(screen.queryByRole('option', { name: 'Pea' })).toBe(null);
+
+      await act(async () => screen.getByRole('option', { name: 'Apple' }).focus());
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'a', ctrlKey: true });
+      await flushMicrotasks();
+
+      expect(handleValueChange).toHaveBeenCalledTimes(1);
+      expect(handleValueChange.mock.calls[0][0]).toEqual(
+        ALL_PRODUCE.filter((item) => item !== 'Pea'),
+      );
     });
   });
 

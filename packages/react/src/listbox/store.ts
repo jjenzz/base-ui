@@ -2,8 +2,8 @@ import type * as React from 'react';
 import { ReactStore, createSelector } from '@base-ui/utils/store';
 import { compareItemEquality } from '../internals/itemEquality';
 import type { ListboxRoot } from './root/ListboxRoot';
-import { createLazyArrayRef } from './list/ListboxCollection';
-import type { LazyArrayRef } from './list/ListboxCollection';
+import { createLazyArrayRef } from './list/ListboxHiddenItems';
+import type { LazyArrayRef } from './list/ListboxHiddenItems';
 
 export type State = {
   id: string | undefined;
@@ -26,8 +26,10 @@ export type State = {
    * Every item, including those that aren't rendered, when they're passed to `Listbox.Root`.
    */
   items: readonly any[] | undefined;
-  /** The positions of the rendered items, when the list renders only some of them. */
-  indexes: readonly number[] | undefined;
+  /** The groups, when `items` is grouped. `items` then holds every group's items in order. */
+  itemGroups: ReadonlyArray<{ items: readonly any[] }> | undefined;
+  /** The positions of the first and last rendered items, when only some of them render. */
+  range: { start: number; end: number } | undefined;
   /** Whether the item that holds the tab stop is rendered. */
   activeItemRendered: boolean;
 
@@ -52,6 +54,11 @@ export type Context = {
   pendingFocusIndexRef: React.RefObject<number | null>;
   /** Called when an item receives focus. */
   onItemFocus: (index: number) => void;
+  /**
+   * The render function of each `Listbox.Collection`, by group index (`-1` without groups), for
+   * reading the data of items that aren't rendered.
+   */
+  itemTemplates: Map<number, (item: any, index: number) => React.ReactNode>;
 };
 
 /**
@@ -90,8 +97,9 @@ export const selectors = {
 
   listElement: createSelector((state: State) => state.listElement),
   items: createSelector((state: State) => state.items),
-  indexes: createSelector((state: State) => state.indexes),
-  hasCollection: createSelector((state: State) => state.indexes != null),
+  itemGroups: createSelector((state: State) => state.itemGroups),
+  range: createSelector((state: State) => state.range),
+  hasCollection: createSelector((state: State) => state.range != null),
   activeItemRendered: createSelector((state: State) => state.activeItemRendered),
 
   orientation: createSelector((state: State) => state.orientation),
@@ -172,7 +180,8 @@ function createInitialState(): State {
     itemFocused: false,
     hoveredIndex: null,
     items: undefined,
-    indexes: undefined,
+    itemGroups: undefined,
+    range: undefined,
     activeItemRendered: false,
     listElement: null,
     orientation: 'vertical',
@@ -192,5 +201,6 @@ function createInitialContext(): Context {
     highlightEvent: undefined,
     pendingFocusIndexRef: { current: null },
     onItemFocus: () => {},
+    itemTemplates: new Map(),
   };
 }

@@ -5,3 +5,4 @@ export { ListboxItem as Item } from './item/ListboxItem';
 export { ListboxItemIndicator as ItemIndicator } from './item-indicator/ListboxItemIndicator';
 export { ListboxGroup as Group } from './group/ListboxGroup';
 export { ListboxGroupLabel as GroupLabel } from './group-label/ListboxGroupLabel';
+export { ListboxCollection as Collection } from './collection/ListboxCollection';

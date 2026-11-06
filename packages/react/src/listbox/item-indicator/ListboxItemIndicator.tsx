@@ -7,7 +7,7 @@ import { useOpenChangeComplete } from '../../internals/useOpenChangeComplete';
 import { useRenderElement } from '../../internals/useRenderElement';
 import { transitionStatusMapping } from '../../internals/stateAttributesMapping';
 import { useListboxItemContext } from '../item/ListboxItemContext';
-import { ListboxCollectionContext } from '../list/ListboxCollection';
+import { ListboxCollectionContext } from '../list/ListboxHiddenItems';
 
 const Inner = React.memo(
   React.forwardRef(

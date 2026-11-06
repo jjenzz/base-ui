@@ -25,7 +25,7 @@ import {
   ListboxCollectionContext,
   ListboxCollectionItem,
   ListboxItemIndexContext,
-} from '../list/ListboxCollection';
+} from '../list/ListboxHiddenItems';
 import type { SelectionAction } from '../utils/selectionReducer';
 
 function useListItemValueRegistration(params: {
@@ -137,7 +137,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
     valuesRef,
   });
 
-  // With `indexes`, the hidden copy of every item records disabled states instead.
+  // With `range`, the listbox reads disabled states from every item instead.
   useIsoLayoutEffect(() => {
     if (!hasRegistered || hasCollection) {
       return undefined;
