@@ -119,25 +119,29 @@ export const ListboxCollectionItem = React.memo(function ListboxCollectionItem(
 });
 
 export interface ListboxHiddenRootProps {
-  /** Receives the function that sets which items render. */
-  controllerRef: React.RefObject<((indexes: number[]) => void) | null>;
+  /** Receives the function that sets which version each chunk renders, or `-1` for none. */
+  controllerRef: React.RefObject<React.Dispatch<React.SetStateAction<number[]>> | null>;
   registry: Map<number, ListboxHiddenItemEntry>;
   /** Renders the item at an index with the latest render function. */
   renderItem: (index: number) => React.ReactNode;
+  /** The version each chunk last committed, written by the chunks. */
+  committedVersions: number[];
+  count: number;
+  chunkSize: number;
 }
 
 /**
- * Renders the items whose data is being read, into a detached fragment. It only renders when
- * asked to, not when the list renders.
+ * Renders the items into a detached fragment, in chunks, so the data of items that aren't
+ * rendered is ready to read. It only renders when asked to, not when the list renders.
  */
 export const ListboxHiddenRoot = React.memo(function ListboxHiddenRoot(
   props: ListboxHiddenRootProps,
 ) {
-  const { controllerRef, registry, renderItem } = props;
-  const [indexes, setIndexes] = React.useState<number[]>([]);
+  const { controllerRef, registry, renderItem, committedVersions, count, chunkSize } = props;
+  const [chunkVersions, setChunkVersions] = React.useState<number[]>([]);
 
   useIsoLayoutEffect(() => {
-    controllerRef.current = setIndexes;
+    controllerRef.current = setChunkVersions;
     return () => {
       controllerRef.current = null;
     };
@@ -145,11 +149,53 @@ export const ListboxHiddenRoot = React.memo(function ListboxHiddenRoot(
 
   return (
     <ListboxCollectionContext.Provider value={registry}>
-      {indexes.map((index) => (
-        <ListboxItemIndexContext.Provider key={index} value={index}>
-          {renderItem(index)}
-        </ListboxItemIndexContext.Provider>
-      ))}
+      {chunkVersions.map((version, chunk) =>
+        version < 0 || chunk * chunkSize >= count ? null : (
+          <ListboxHiddenChunk
+            key={chunk}
+            chunk={chunk}
+            start={chunk * chunkSize}
+            end={Math.min(count, (chunk + 1) * chunkSize)}
+            version={version}
+            renderItem={renderItem}
+            committedVersions={committedVersions}
+          />
+        ),
+      )}
     </ListboxCollectionContext.Provider>
   );
+});
+
+interface ListboxHiddenChunkProps {
+  chunk: number;
+  start: number;
+  end: number;
+  version: number;
+  renderItem: (index: number) => React.ReactNode;
+  committedVersions: number[];
+}
+
+/**
+ * A chunk of hidden items. It renders again only when its version changes, and its items only
+ * render again when their data changed.
+ */
+const ListboxHiddenChunk = React.memo(function ListboxHiddenChunk(props: ListboxHiddenChunkProps) {
+  const { chunk, start, end, version, renderItem, committedVersions } = props;
+
+  useIsoLayoutEffect(() => {
+    committedVersions[chunk] = version;
+    return () => {
+      committedVersions[chunk] = -1;
+    };
+  }, [chunk, version, committedVersions]);
+
+  const rendered: React.ReactNode[] = [];
+  for (let index = start; index < end; index += 1) {
+    rendered.push(
+      <ListboxItemIndexContext.Provider key={index} value={index}>
+        {renderItem(index)}
+      </ListboxItemIndexContext.Provider>,
+    );
+  }
+  return <React.Fragment>{rendered}</React.Fragment>;
 });

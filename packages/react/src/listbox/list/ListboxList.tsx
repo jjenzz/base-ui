@@ -4,6 +4,7 @@ import * as ReactDOM from 'react-dom';
 import { platform } from '@base-ui/utils/platform';
 import { useStableCallback } from '@base-ui/utils/useStableCallback';
 import { useRefWithInit } from '@base-ui/utils/useRefWithInit';
+import { useTimeout } from '@base-ui/utils/useTimeout';
 import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
 import { areArraysEqual } from '@base-ui/utils/areArraysEqual';
@@ -27,9 +28,10 @@ import { ListboxHiddenRoot, ListboxListGroupContext } from './ListboxHiddenItems
 import type { ListboxHiddenItemEntry } from './ListboxHiddenItems';
 import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
 
-// How many items are read at a time when the data of items that aren't rendered is needed.
-const MIN_READ_BATCH = 100;
-const MAX_READ_BATCH = 2000;
+// How many hidden items render at a time, and how long to wait after a change before refreshing
+// them in the background.
+const HIDDEN_CHUNK_SIZE = 200;
+const HIDDEN_REFRESH_DELAY = 100;
 
 /**
  * A container for the listbox items.
@@ -597,16 +599,22 @@ export const ListboxList = React.forwardRef(function ListboxList(
     content = children;
   }
 
-  // With `range`, the listbox reads the labels and disabled states of items that aren't rendered
-  // only when something needs them, such as typeahead or selecting a range. It renders a batch of
-  // items around the one being read into a detached fragment, with the latest render function,
-  // and reads what each item registers. Nothing is kept between renders, so it's never stale.
+  // With `range`, the listbox renders every item into a detached fragment in the background, a
+  // chunk at a time, and reads what each item registers when typeahead or a selection needs it.
+  // When the items or a render function change, the chunks render again in the background. A
+  // read that reaches a chunk that hasn't caught up renders it right away, so it's never stale.
   const hasCollection = range != null;
   const fragment = useRefWithInit(() =>
     typeof document === 'undefined' ? null : document.createDocumentFragment(),
   ).current;
   const registry = useRefWithInit(() => new Map<number, ListboxHiddenItemEntry>()).current;
-  const hiddenControllerRef = React.useRef<((indexes: number[]) => void) | null>(null);
+  const hiddenControllerRef = React.useRef<React.Dispatch<React.SetStateAction<number[]>> | null>(
+    null,
+  );
+  const committedVersions = useRefWithInit(() => [] as number[]).current;
+  const versionRef = React.useRef(0);
+  const signatureRef = React.useRef<{ items: readonly any[]; templates: unknown[] } | null>(null);
+  const fillTimeout = useTimeout();
 
   const renderHiddenItem = useStableCallback((index: number) => {
     const { itemTemplates, valuesRef } = store.context;
@@ -631,54 +639,40 @@ export const ListboxList = React.forwardRef(function ListboxList(
     return template ? template(valuesRef.current[index], index - offset) : null;
   });
 
-  // What's been read since the list last rendered. Batches grow while a scan keeps going in one
-  // direction, so reading every item takes a handful of batches.
-  const readCacheRef = React.useRef({
-    labels: [] as Array<string | null>,
-    disabled: [] as boolean[],
-    batchStart: -1,
-    batchEnd: -1,
-    batchSize: 0,
-  });
+  const renderChunk = (chunk: number) => {
+    const chunkCount = Math.ceil((store.state.items?.length ?? 0) / HIDDEN_CHUNK_SIZE);
+    const version = versionRef.current;
+    hiddenControllerRef.current?.((previous) => {
+      const next = previous.slice(0, chunkCount);
+      while (next.length < chunkCount) {
+        next.push(-1);
+      }
+      next[chunk] = version;
+      return next;
+    });
+  };
 
-  const readItem = useStableCallback((index: number) => {
-    const cache = readCacheRef.current;
-    if (index in cache.disabled) {
-      return;
-    }
-    const count = store.state.items?.length ?? 0;
-    let start: number;
-    let end: number;
-    if (index === cache.batchEnd) {
-      cache.batchSize = Math.min(cache.batchSize * 2, MAX_READ_BATCH);
-      start = index;
-      end = Math.min(count, index + cache.batchSize);
-    } else if (index === cache.batchStart - 1) {
-      cache.batchSize = Math.min(cache.batchSize * 2, MAX_READ_BATCH);
-      start = Math.max(0, index - cache.batchSize + 1);
-      end = index + 1;
-    } else {
-      cache.batchSize = MIN_READ_BATCH;
-      start = Math.max(0, index - MIN_READ_BATCH / 2);
-      end = Math.min(count, start + MIN_READ_BATCH);
-    }
-    cache.batchStart = start;
-    cache.batchEnd = end;
-
-    const indexes: number[] = [];
-    for (let position = start; position < end; position += 1) {
-      if (!(position in cache.disabled)) {
-        indexes.push(position);
+  // Renders the next chunk that hasn't caught up, one per task.
+  const fillNextChunk = useStableCallback(() => {
+    const chunkCount = Math.ceil((store.state.items?.length ?? 0) / HIDDEN_CHUNK_SIZE);
+    for (let chunk = 0; chunk < chunkCount; chunk += 1) {
+      if (committedVersions[chunk] !== versionRef.current) {
+        renderChunk(chunk);
+        fillTimeout.start(0, fillNextChunk);
+        return;
       }
     }
-    ReactDOM.flushSync(() => {
-      hiddenControllerRef.current?.(indexes);
-    });
-    for (const position of indexes) {
-      const entry = registry.get(position);
-      cache.labels[position] = entry ? entry.getLabel() : null;
-      cache.disabled[position] = entry?.disabled ?? false;
+  });
+
+  // Renders the chunk with an item right away when it hasn't caught up.
+  const readHiddenItem = useStableCallback((index: number) => {
+    const chunk = Math.floor(index / HIDDEN_CHUNK_SIZE);
+    if (committedVersions[chunk] !== versionRef.current) {
+      ReactDOM.flushSync(() => {
+        renderChunk(chunk);
+      });
     }
+    return registry.get(index);
   });
 
   useIsoLayoutEffect(() => {
@@ -696,8 +690,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
         if (rendered) {
           return rendered.getLabel();
         }
-        readItem(index);
-        return readCacheRef.current.labels[index] ?? null;
+        return readHiddenItem(index)?.getLabel() ?? null;
       },
     });
     disabledData.setReader({
@@ -707,21 +700,32 @@ export const ListboxList = React.forwardRef(function ListboxList(
         if (rendered) {
           return rendered.disabled;
         }
-        readItem(index);
-        return readCacheRef.current.disabled[index] ?? false;
+        return readHiddenItem(index)?.disabled ?? false;
       },
     });
-  }, [hasCollection, readItem, store]);
+  }, [hasCollection, readHiddenItem, store]);
 
-  // Any render can change what the render functions return, so reads start fresh.
+  // A new version starts when the items or a render function change. Render functions are often
+  // new on every render of the consumer's component, so the refresh waits for renders to pause.
   useIsoLayoutEffect(() => {
-    readCacheRef.current = {
-      labels: [],
-      disabled: [],
-      batchStart: -1,
-      batchEnd: -1,
-      batchSize: 0,
-    };
+    if (!hasCollection || !items) {
+      signatureRef.current = null;
+      fillTimeout.clear();
+      return;
+    }
+    const templates = Array.from(store.context.itemTemplates.values());
+    const previous = signatureRef.current;
+    if (
+      previous &&
+      previous.items === items &&
+      previous.templates.length === templates.length &&
+      previous.templates.every((template, index) => template === templates[index])
+    ) {
+      return;
+    }
+    signatureRef.current = { items, templates };
+    versionRef.current += 1;
+    fillTimeout.start(previous ? HIDDEN_REFRESH_DELAY : 0, fillNextChunk);
   });
 
   const collection =
@@ -731,6 +735,9 @@ export const ListboxList = React.forwardRef(function ListboxList(
             controllerRef={hiddenControllerRef}
             registry={registry}
             renderItem={renderHiddenItem}
+            committedVersions={committedVersions}
+            count={itemCount ?? 0}
+            chunkSize={HIDDEN_CHUNK_SIZE}
           />,
           fragment,
         )
