@@ -23,11 +23,7 @@ import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { selectionReducer } from '../utils/selectionReducer';
 import type { SelectionAction } from '../utils/selectionReducer';
-import {
-  ListboxCollectionContext,
-  ListboxItemIndexContext,
-  createItemKeys,
-} from './ListboxCollection';
+import { ListboxCollectionContext, ListboxItemIndexContext } from './ListboxCollection';
 import type { ListboxCollection } from './ListboxCollection';
 
 /**
@@ -560,20 +556,13 @@ export const ListboxList = React.forwardRef(function ListboxList(
     }
   }, [value, store, getTabStopIndex]);
 
-  // Stable keys, so items keep their elements when other items are added, removed or moved.
-  const getItemKeys = useRefWithInit(createItemKeys).current;
-  const itemKeys = React.useMemo(
-    () => (items ? getItemKeys(items) : undefined),
-    [items, getItemKeys],
-  );
-
   // With `items`, the children render one item, and the list renders each item it shows: every
   // item, or only those at `indexes`, in order.
   let content: React.ReactNode;
   if (typeof children === 'function') {
-    if (items && itemKeys) {
+    if (items) {
       const renderItem = (index: number) => (
-        <ListboxItemIndexContext.Provider key={itemKeys[index]} value={index}>
+        <ListboxItemIndexContext.Provider key={index} value={index}>
           {children(items[index], index)}
         </ListboxItemIndexContext.Provider>
       );
@@ -589,9 +578,9 @@ export const ListboxList = React.forwardRef(function ListboxList(
   }
 
   // With `indexes`, a hidden copy of every item renders into a detached fragment and records each
-  // label and disabled state, so selection and typeahead know the items that aren't rendered. It
-  // renders again only when the items change, and then only the items that changed, so a render
-  // function that depends on other state only takes effect in the hidden copy for changed items.
+  // label and disabled state by position, so selection and typeahead know the items that aren't
+  // rendered. It renders again when the items change, and then each hidden item renders again only
+  // if its label, disabled state or text changed.
   const templateRef = React.useRef(children);
   templateRef.current = children;
   const fragment = useRefWithInit(() =>
@@ -613,38 +602,23 @@ export const ListboxList = React.forwardRef(function ListboxList(
       }
     },
   })).current;
-  // The element rendered for each item, reused while the item is the same.
-  const collectionCacheRef = React.useRef(
-    new Map<string, { item: unknown; element: React.ReactNode }>(),
-  );
   const hasCollection = indexes != null;
   const collection = React.useMemo(() => {
     const template = templateRef.current;
-    if (!hasCollection || !items || !itemKeys || !fragment || typeof template !== 'function') {
-      collectionCacheRef.current = new Map();
+    if (!hasCollection || !items || !fragment || typeof template !== 'function') {
       return null;
     }
-    const previousCache = collectionCacheRef.current;
-    const nextCache = new Map<string, { item: unknown; element: React.ReactNode }>();
-    const rendered = items.map((item, index) => {
-      const key = itemKeys[index];
-      const cached = previousCache.get(key);
-      const element = cached && cached.item === item ? cached.element : template(item, index);
-      nextCache.set(key, { item, element });
-      return (
-        <ListboxItemIndexContext.Provider key={key} value={index}>
-          {element}
-        </ListboxItemIndexContext.Provider>
-      );
-    });
-    collectionCacheRef.current = nextCache;
     return ReactDOM.createPortal(
       <ListboxCollectionContext.Provider value={collectionValue}>
-        {rendered}
+        {items.map((item, index) => (
+          <ListboxItemIndexContext.Provider key={index} value={index}>
+            {template(item, index)}
+          </ListboxItemIndexContext.Provider>
+        ))}
       </ListboxCollectionContext.Provider>,
       fragment,
     );
-  }, [hasCollection, items, itemKeys, fragment, collectionValue]);
+  }, [hasCollection, items, fragment, collectionValue]);
 
   const element = useRenderElement('div', componentProps, {
     ref: [forwardedRef, setListElement, composite.props.ref],

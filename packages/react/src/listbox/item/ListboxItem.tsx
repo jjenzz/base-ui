@@ -21,7 +21,11 @@ import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
 import { selectionReducer } from '../utils/selectionReducer';
-import { ListboxCollectionContext, ListboxItemIndexContext } from '../list/ListboxCollection';
+import {
+  ListboxCollectionContext,
+  ListboxCollectionItem,
+  ListboxItemIndexContext,
+} from '../list/ListboxCollection';
 import type { SelectionAction } from '../utils/selectionReducer';
 
 function useListItemValueRegistration(params: {
@@ -57,17 +61,13 @@ export const ListboxItem = React.memo(
     componentProps: ListboxItem.Props,
     forwardedRef: React.ForwardedRef<HTMLElement>,
   ) {
-    const collection = React.useContext(ListboxCollectionContext);
-    const index = React.useContext(ListboxItemIndexContext) ?? -1;
-
-    // In the hidden copy of every item, the item is a bare `<span>` that records its label and
-    // disabled state. Its text is only needed when there's no `label`.
-    if (collection) {
+    // In the hidden copy of every item, the item only records its label and disabled state.
+    if (React.useContext(ListboxCollectionContext)) {
       const { label, disabled = false, children } = componentProps;
       return (
-        <span ref={(element) => collection.record(element, index, label, disabled)}>
-          {label == null ? children : null}
-        </span>
+        <ListboxCollectionItem label={label} disabled={disabled}>
+          {children}
+        </ListboxCollectionItem>
       );
     }
 
