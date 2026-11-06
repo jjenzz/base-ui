@@ -6,9 +6,44 @@ import * as React from 'react';
  */
 export const ListboxItemIndexContext = React.createContext<number | undefined>(undefined);
 
+/**
+ * A ref to a list of item data, such as labels, that can be built the first time it's read.
+ * Without `resolve`, it's a plain ref that parts write into.
+ */
+export interface LazyArrayRef<T> extends React.RefObject<T[]> {
+  /** Builds the list. Called when `current` is read after `invalidate()`. */
+  resolve: (() => T[]) | null;
+  /** Marks the list as out of date, so the next read builds it again. */
+  invalidate: () => void;
+}
+
+export function createLazyArrayRef<T>(): LazyArrayRef<T> {
+  let values: T[] = [];
+  let stale = false;
+  const ref: LazyArrayRef<T> = {
+    resolve: null,
+    invalidate() {
+      stale = true;
+    },
+    get current() {
+      if (stale && ref.resolve) {
+        stale = false;
+        values = ref.resolve();
+      }
+      return values;
+    },
+    set current(next: T[]) {
+      stale = false;
+      values = next;
+    },
+  };
+  return ref;
+}
+
 export interface ListboxCollection {
   /**
-   * Records an item's label and disabled state, or forgets them when `element` is `null`.
+   * Registers a hidden item's element, whose text is read only when its label is needed, or
+   * forgets it when `element` is `null`.
    */
   record: (
     element: HTMLElement | null,
@@ -19,8 +54,8 @@ export interface ListboxCollection {
 }
 
 /**
- * Present while `Listbox.Item` renders into the hidden copy of every item, which records each
- * label and disabled state so the listbox knows them for items that aren't rendered.
+ * Present while `Listbox.Item` renders into the hidden copy, which holds the items whose label
+ * can only be read from their rendered text.
  */
 export const ListboxCollectionContext = React.createContext<ListboxCollection | null>(null);
 
@@ -31,9 +66,9 @@ export interface ListboxCollectionItemProps {
 }
 
 /**
- * An item in the hidden copy: a bare `<span>` that records its label and disabled state at its
- * position. It takes only the data it records, so it renders again only when that data changes,
- * not when the item's value or other props are new objects.
+ * An item in the hidden copy: a bare `<span>` that renders the item's text and registers itself
+ * at its position. It takes only the data it uses, so it renders again only when that data
+ * changes, not when the item's value or other props are new objects.
  */
 export const ListboxCollectionItem = React.memo(function ListboxCollectionItem(
   props: ListboxCollectionItemProps,

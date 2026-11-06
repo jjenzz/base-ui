@@ -2,6 +2,8 @@ import type * as React from 'react';
 import { ReactStore, createSelector } from '@base-ui/utils/store';
 import { compareItemEquality } from '../internals/itemEquality';
 import type { ListboxRoot } from './root/ListboxRoot';
+import { createLazyArrayRef } from './list/ListboxCollection';
+import type { LazyArrayRef } from './list/ListboxCollection';
 
 export type State = {
   id: string | undefined;
@@ -39,8 +41,8 @@ export type State = {
 
 export type Context = {
   valuesRef: React.RefObject<Array<any>>;
-  labelsRef: React.RefObject<Array<string | null>>;
-  disabledItemsRef: React.RefObject<Array<boolean | undefined>>;
+  labelsRef: LazyArrayRef<string | null>;
+  disabledItemsRef: LazyArrayRef<boolean | undefined>;
   typingRef: React.RefObject<boolean>;
   lastSelectedIndexRef: React.RefObject<number | null>;
   setValue: (nextValue: any, eventDetails: ListboxRoot.ChangeEventDetails) => void;
@@ -182,8 +184,8 @@ function createInitialState(): State {
 function createInitialContext(): Context {
   return {
     valuesRef: { current: [] },
-    labelsRef: { current: [] },
-    disabledItemsRef: { current: [] },
+    labelsRef: createLazyArrayRef(),
+    disabledItemsRef: createLazyArrayRef(),
     typingRef: { current: false },
     lastSelectedIndexRef: { current: null },
     setValue: () => {},

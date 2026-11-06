@@ -25,6 +25,7 @@ import { selectionReducer } from '../utils/selectionReducer';
 import type { SelectionAction } from '../utils/selectionReducer';
 import { ListboxCollectionContext, ListboxItemIndexContext } from './ListboxCollection';
 import type { ListboxCollection } from './ListboxCollection';
+import { ListboxItem } from '../item/ListboxItem';
 
 /**
  * A container for the listbox items.
@@ -586,39 +587,88 @@ export const ListboxList = React.forwardRef(function ListboxList(
   const fragment = useRefWithInit(() =>
     typeof document === 'undefined' ? null : document.createDocumentFragment(),
   ).current;
+  // The hidden items that rendered, by position. Their text is read only when it's needed.
+  const renderedEntriesRef = React.useRef(
+    new Map<number, { element: HTMLElement; label: string | undefined; disabled: boolean }>(),
+  );
   const collectionValue = useRefWithInit((): ListboxCollection => ({
     record(element, index, label, disabled) {
       if (index === -1) {
         return;
       }
-      const labels = store.context.labelsRef.current;
-      const disabledItems = store.context.disabledItemsRef.current;
       if (element) {
-        labels[index] = label ?? element.textContent;
-        disabledItems[index] = disabled;
+        renderedEntriesRef.current.set(index, { element, label, disabled });
       } else {
-        delete labels[index];
-        delete disabledItems[index];
+        renderedEntriesRef.current.delete(index);
       }
+      store.context.labelsRef.invalidate();
+      store.context.disabledItemsRef.invalidate();
     },
   })).current;
   const hasCollection = indexes != null;
-  const collection = React.useMemo(() => {
+
+  // With `indexes`, the render function runs for every item when the items change. A
+  // `Listbox.Item` with a `label` or text children has its data in its props, so it doesn't render.
+  // Only the rest render into the hidden copy.
+  const hiddenItems = React.useMemo(() => {
     const template = templateRef.current;
-    if (!hasCollection || !items || !fragment || typeof template !== 'function') {
+    if (!hasCollection || !items || typeof template !== 'function') {
+      return null;
+    }
+    const known: Array<{ label: string; disabled: boolean } | undefined> = new Array(items.length);
+    const rendered: React.ReactNode[] = [];
+    for (let index = 0; index < items.length; index += 1) {
+      const element = template(items[index], index);
+      const data = readItemData(element);
+      if (data) {
+        known[index] = data;
+      } else {
+        rendered.push(
+          <ListboxItemIndexContext.Provider key={index} value={index}>
+            {element}
+          </ListboxItemIndexContext.Provider>,
+        );
+      }
+    }
+    return { known, rendered };
+  }, [hasCollection, items]);
+
+  const collection = React.useMemo(() => {
+    if (!hiddenItems || hiddenItems.rendered.length === 0 || !fragment) {
       return null;
     }
     return ReactDOM.createPortal(
       <ListboxCollectionContext.Provider value={collectionValue}>
-        {items.map((item, index) => (
-          <ListboxItemIndexContext.Provider key={index} value={index}>
-            {template(item, index)}
-          </ListboxItemIndexContext.Provider>
-        ))}
+        {hiddenItems.rendered}
       </ListboxCollectionContext.Provider>,
       fragment,
     );
-  }, [hasCollection, items, fragment, collectionValue]);
+  }, [hiddenItems, fragment, collectionValue]);
+
+  // Labels and disabled states are built the first time something needs them, such as typeahead
+  // or selecting a range, so a list nobody types in never builds its labels.
+  useIsoLayoutEffect(() => {
+    const { labelsRef: lazyLabels, disabledItemsRef: lazyDisabled } = store.context;
+    if (!hiddenItems) {
+      lazyLabels.resolve = null;
+      lazyDisabled.resolve = null;
+      return;
+    }
+    const { known } = hiddenItems;
+    const entries = renderedEntriesRef.current;
+    lazyLabels.resolve = () =>
+      Array.from(known, (data, index) => {
+        if (data) {
+          return data.label;
+        }
+        const entry = entries.get(index);
+        return entry ? (entry.label ?? entry.element.textContent) : null;
+      });
+    lazyDisabled.resolve = () =>
+      Array.from(known, (data, index) => data?.disabled ?? entries.get(index)?.disabled ?? false);
+    lazyLabels.invalidate();
+    lazyDisabled.invalidate();
+  }, [hiddenItems, store]);
 
   const element = useRenderElement('div', componentProps, {
     ref: [forwardedRef, setListElement, composite.props.ref],
@@ -642,6 +692,43 @@ export const ListboxList = React.forwardRef(function ListboxList(
     </React.Fragment>
   );
 });
+
+/**
+ * Reads an item's label and disabled state from its props, when the render function returns a
+ * `Listbox.Item` whose label is its `label` prop or its text children.
+ */
+function readItemData(element: React.ReactNode) {
+  if (!React.isValidElement(element) || element.type !== ListboxItem) {
+    return null;
+  }
+  const { label, disabled = false, children } = element.props as ListboxItem.Props;
+  if (label != null) {
+    return { label, disabled };
+  }
+  const text = readText(children);
+  return text == null ? null : { label: text, disabled };
+}
+
+function readText(children: React.ReactNode): string | null {
+  if (typeof children === 'string' || typeof children === 'number') {
+    return String(children);
+  }
+  if (children == null || typeof children === 'boolean') {
+    return '';
+  }
+  if (Array.isArray(children)) {
+    let text = '';
+    for (const child of children) {
+      const childText = readText(child);
+      if (childText == null) {
+        return null;
+      }
+      text += childText;
+    }
+    return text;
+  }
+  return null;
+}
 
 export interface ListboxListState {
   /**

@@ -15,6 +15,7 @@ import { useBaseUiId } from '../../internals/useBaseUiId';
 import { defaultItemEquality } from '../../internals/itemEquality';
 import { ListboxRootContext } from './ListboxRootContext';
 import { ListboxStore } from '../store';
+import { createLazyArrayRef } from '../list/ListboxCollection';
 import { useHighlightChangeNotifier } from '../utils/useHighlightChangeNotifier';
 
 /**
@@ -61,9 +62,9 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     return value == null ? EMPTY_ARRAY : [value];
   }, [value, multiple]);
 
-  const labelsRef = React.useRef<Array<string | null>>([]);
+  const labelsRef = useRefWithInit(createLazyArrayRef<string | null>).current;
   const valuesRef = React.useRef<Array<any>>([]);
-  const disabledItemsRef = React.useRef<Array<boolean | undefined>>([]);
+  const disabledItemsRef = useRefWithInit(createLazyArrayRef<boolean | undefined>).current;
   const typingRef = React.useRef(false);
   const lastSelectedIndexRef = React.useRef<number | null>(null);
 

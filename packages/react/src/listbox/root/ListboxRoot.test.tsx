@@ -2377,12 +2377,14 @@ describe('<Listbox.Root />', () => {
         start?: number;
         follow?: boolean;
         disabledItems?: string[];
+        nestedText?: boolean;
       },
     ) {
       const {
         start: startProp = 0,
         follow = true,
         disabledItems = [],
+        nestedText = false,
         items = ALL_ITEMS,
         onItemHighlighted,
         ...rootProps
@@ -2415,7 +2417,7 @@ describe('<Listbox.Root />', () => {
             <Listbox.List>
               {(item: string) => (
                 <Listbox.Item value={item} disabled={disabledItems.includes(item)}>
-                  {item}
+                  {nestedText ? <strong>{item}</strong> : item}
                 </Listbox.Item>
               )}
             </Listbox.List>
@@ -2597,6 +2599,19 @@ describe('<Listbox.Root />', () => {
 
     it('moves focus to a typeahead match that is not rendered', async () => {
       await render(<VirtualList />);
+
+      await act(async () => screen.getByRole('option', { name: 'Item 2' }).focus());
+      for (const key of 'item 50') {
+        fireEvent.keyDown(document.activeElement as HTMLElement, { key });
+        // eslint-disable-next-line no-await-in-loop
+        await flushMicrotasks();
+      }
+
+      expect(screen.getByRole('option', { name: 'Item 50' })).toHaveFocus();
+    });
+
+    it('moves focus to a typeahead match that is not rendered when its text is in an element', async () => {
+      await render(<VirtualList nestedText />);
 
       await act(async () => screen.getByRole('option', { name: 'Item 2' }).focus());
       for (const key of 'item 50') {
