@@ -34,19 +34,39 @@ export function useHighlightChangeNotifier<Value>(params: {
   );
 
   const lastReportedHighlightRef = React.useRef<ResolvedHighlight<Value> | null>(null);
+  // Reading a value can render items that aren't rendered, which commits other store changes.
+  // Those are part of the same highlight change, so they're ignored while it's being read.
+  const resolvingRef = React.useRef(false);
 
-  const resolveHighlightedItem = useStableCallback((): ResolvedHighlight<Value> => {
-    const highlightedIndex = getHighlightedIndex(store.state);
+  const resolveHighlightedItem = useStableCallback(
+    (previous: ResolvedHighlight<Value> | null): ResolvedHighlight<Value> => {
+      const highlightedIndex = getHighlightedIndex(store.state);
 
-    if (highlightedIndex == null) {
-      return { index: -1, value: undefined };
-    }
+      if (highlightedIndex == null) {
+        return { index: -1, value: undefined };
+      }
 
-    return {
-      index: highlightedIndex,
-      value: store.context.valuesRef.current[highlightedIndex] as Value | undefined,
-    };
-  });
+      // With `range`, reading the value of an item that isn't rendered renders it, so the value is
+      // only read when the highlight moves, which happens in event handlers, not when the store
+      // changes for other reasons, such as an item mounting.
+      if (store.state.range != null) {
+        if (previous?.index === highlightedIndex) {
+          return previous;
+        }
+        if (previous == null) {
+          return {
+            index: highlightedIndex,
+            value: store.context.renderedItems.get(highlightedIndex)?.value,
+          };
+        }
+      }
+
+      return {
+        index: highlightedIndex,
+        value: store.context.valuesRef.current[highlightedIndex] as Value | undefined,
+      };
+    },
+  );
 
   const areHighlightsEqual = useStableCallback(
     (prev: ResolvedHighlight<Value> | null, next: ResolvedHighlight<Value>) => {
@@ -66,10 +86,19 @@ export function useHighlightChangeNotifier<Value>(params: {
       return undefined;
     }
 
-    lastReportedHighlightRef.current = resolveHighlightedItem();
+    lastReportedHighlightRef.current = resolveHighlightedItem(null);
 
     return store.subscribe(() => {
-      const nextHighlight = resolveHighlightedItem();
+      if (resolvingRef.current) {
+        return;
+      }
+      resolvingRef.current = true;
+      let nextHighlight: ResolvedHighlight<Value>;
+      try {
+        nextHighlight = resolveHighlightedItem(lastReportedHighlightRef.current);
+      } finally {
+        resolvingRef.current = false;
+      }
 
       if (areHighlightsEqual(lastReportedHighlightRef.current, nextHighlight)) {
         return;

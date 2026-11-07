@@ -2691,6 +2691,93 @@ describe('<Listbox.Root />', () => {
     });
   });
 
+  describe('prop: range', () => {
+    const { render: renderFakeTimers, clock } = createRenderer();
+
+    clock.withFakeTimers();
+
+    interface Row {
+      id: string;
+      name: string;
+    }
+    const ROWS: Row[] = Array.from({ length: 3000 }, (_, index) => ({
+      id: `id-${index}`,
+      name: `Row ${index}`,
+    }));
+
+    // Renders a window of 5 rows, moved to the highlighted row. Each item's value is the row's id,
+    // not the row.
+    function RowList(
+      props: Listbox.Root.Props<string, boolean | 'opt-in'> & { disabledIds?: string[] },
+    ) {
+      const { disabledIds = [], ...rootProps } = props;
+      const [start, setStart] = React.useState(0);
+      return (
+        <Listbox.Root
+          multiple
+          {...rootProps}
+          items={ROWS}
+          range={{ start, end: start + 4 }}
+          onItemHighlighted={(_, { index }) => {
+            if (index !== -1 && (index < start || index > start + 4)) {
+              setStart(Math.min(index, ROWS.length - 5));
+            }
+          }}
+        >
+          <Listbox.List aria-label="Rows">
+            {(row: Row) => (
+              <Listbox.Item value={row.id} disabled={disabledIds.includes(row.id)}>
+                {row.name}
+              </Listbox.Item>
+            )}
+          </Listbox.List>
+        </Listbox.Root>
+      );
+    }
+
+    it('selects every item with Ctrl+A after the key press, without disabled items that are not rendered', async () => {
+      const handleValueChange = vi.fn();
+      await renderFakeTimers(
+        <RowList disabledIds={['id-2000']} onValueChange={handleValueChange} />,
+      );
+      expect(screen.queryByRole('option', { name: 'Row 2000' })).toBe(null);
+
+      await act(async () => screen.getByRole('option', { name: 'Row 0' }).focus());
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'a', ctrlKey: true });
+      // The selection resolves after the key press is handled.
+      expect(handleValueChange).toHaveBeenCalledTimes(0);
+
+      await clock.tickAsync(100);
+
+      expect(handleValueChange).toHaveBeenCalledTimes(1);
+      expect(handleValueChange.mock.calls[0][0]).toEqual(
+        ROWS.map((row) => row.id).filter((id) => id !== 'id-2000'),
+      );
+    });
+
+    it('cancels a Ctrl+A that is still resolving when another key is pressed', async () => {
+      const handleValueChange = vi.fn();
+      await renderFakeTimers(<RowList onValueChange={handleValueChange} />);
+
+      await act(async () => screen.getByRole('option', { name: 'Row 0' }).focus());
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'a', ctrlKey: true });
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
+      await clock.tickAsync(100);
+
+      expect(handleValueChange).toHaveBeenCalledTimes(0);
+    });
+
+    it('moves focus to a selected item that is not rendered, found by its value', async () => {
+      await renderFakeTimers(<RowList defaultValue={['id-2500']} />);
+      expect(screen.queryByRole('option', { name: 'Row 2500' })).toBe(null);
+
+      await act(async () => screen.getByRole('listbox').focus());
+      await clock.tickAsync(0);
+
+      expect(screen.getByRole('option', { name: 'Row 2500' })).toHaveFocus();
+    });
+  });
+
   describe('prop: items (grouped)', () => {
     interface ProduceGroup {
       name: string;

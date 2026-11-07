@@ -74,7 +74,7 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
   }, [value, multiple]);
 
   const labelsRef = useRefWithInit(createItemDataRef<string | null>).current;
-  const valuesRef = React.useRef<Array<any>>([]);
+  const valuesRef = useRefWithInit(createItemDataRef<any>).current;
   const disabledItemsRef = useRefWithInit(createItemDataRef<boolean | undefined>).current;
   const typingRef = React.useRef(false);
   const lastSelectedIndexRef = React.useRef<number | null>(null);
@@ -152,15 +152,6 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     itemGroups,
     range,
   ]);
-
-  // With `items`, the listbox knows every value, including those that aren't rendered. With
-  // `range`, `Listbox.List` reads their labels and disabled states too.
-  useIsoLayoutEffect(() => {
-    if (!items) {
-      return;
-    }
-    valuesRef.current = items as any[];
-  }, [items]);
 
   useHighlightChangeNotifier<Value>({
     store,

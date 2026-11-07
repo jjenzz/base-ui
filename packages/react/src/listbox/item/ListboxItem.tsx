@@ -20,7 +20,6 @@ import { findItemIndex } from '../../internals/itemEquality';
 import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
-import { selectionReducer } from '../utils/selectionReducer';
 import {
   ListboxCollectionContext,
   ListboxCollectionItem,
@@ -63,14 +62,15 @@ export const ListboxItem = React.memo(
   ) {
     // In the hidden copy of every item, the item only records its label and disabled state.
     if (React.useContext(ListboxCollectionContext)) {
-      const { label, disabled = false, children } = componentProps;
+      const { label, disabled = false, value = null, children } = componentProps;
       return (
-        <ListboxCollectionItem label={label} disabled={disabled}>
+        <ListboxCollectionItem label={label} disabled={disabled} value={value}>
           {children}
         </ListboxCollectionItem>
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
     return <ListboxItemView {...componentProps} forwardedRef={forwardedRef} />;
   }),
 );
@@ -122,7 +122,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
   const active = store.useState('isActive', listItem.index);
   const highlighted = store.useState('isHighlighted', listItem.index);
   const selected = store.useState('isSelected', listItem.index, itemValue);
-  const { disabledItemsRef, lastSelectedIndexRef, setValue, valuesRef } = store.context;
+  const { disabledItemsRef, lastSelectedIndexRef, valuesRef } = store.context;
 
   const index = listItem.index;
   const hasRegistered = index !== -1;
@@ -133,7 +133,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
   useListItemValueRegistration({
     index,
     itemValue,
-    hasRegistered: hasRegistered && !items,
+    hasRegistered: hasRegistered && !hasCollection,
     valuesRef,
   });
 
@@ -149,6 +149,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
       renderedItems.set(index, {
         getLabel: () => label ?? itemRef.current?.textContent ?? null,
         disabled: rootDisabled || disabled,
+        value: itemValue,
       });
       return () => {
         renderedItems.delete(index);
@@ -161,7 +162,17 @@ const ListboxItemView = React.memo(function ListboxItemView(
     return () => {
       delete disabledItems[index];
     };
-  }, [disabled, disabledItemsRef, hasCollection, hasRegistered, index, label, rootDisabled, store]);
+  }, [
+    disabled,
+    disabledItemsRef,
+    hasCollection,
+    hasRegistered,
+    index,
+    itemValue,
+    label,
+    rootDisabled,
+    store,
+  ]);
 
   // In a virtualized list, the list tracks whether the item holding the tab stop is rendered,
   // and takes its place in the tab order while it isn't.
@@ -267,15 +278,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
       action = { type: 'select', index };
     }
 
-    const currentValue = store.state.value;
-    const nextValue = selectionReducer(
-      action,
-      currentValue,
-      valuesRef.current,
-      disabledItemsRef.current,
-      isItemEqualToValue,
-    );
-    setValue(nextValue, eventDetails);
+    store.context.commitSelection(action, eventDetails);
 
     // Update selection anchor (used by Shift+Click range selection)
     if (action.type !== 'extendTo') {
@@ -285,7 +288,11 @@ const ListboxItemView = React.memo(function ListboxItemView(
 
   function handleItemKeyDown(event: BaseUIEvent<React.KeyboardEvent>) {
     lastKeyRef.current = event.key;
-    const currentIndex = findItemIndex(valuesRef.current, itemValue, isItemEqualToValue);
+    // With `range`, the position comes from the list, and looking up the value would read the data
+    // of every item.
+    const currentIndex = hasCollection
+      ? index
+      : findItemIndex(valuesRef.current, itemValue, isItemEqualToValue);
     const resolvedIndex = currentIndex === -1 ? index : currentIndex;
 
     store.highlightItem(resolvedIndex, event.nativeEvent);

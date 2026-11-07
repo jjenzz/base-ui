@@ -2,6 +2,7 @@ import type * as React from 'react';
 import { ReactStore, createSelector } from '@base-ui/utils/store';
 import { compareItemEquality } from '../internals/itemEquality';
 import type { ListboxRoot } from './root/ListboxRoot';
+import type { SelectionAction } from './utils/selectionReducer';
 import { createItemDataRef } from './list/ListboxHiddenItems';
 import type { ItemDataRef, ListboxHiddenItemEntry } from './list/ListboxHiddenItems';
 
@@ -42,7 +43,7 @@ export type State = {
 };
 
 export type Context = {
-  valuesRef: React.RefObject<Array<any>>;
+  valuesRef: ItemDataRef<any>;
   labelsRef: ItemDataRef<string | null>;
   disabledItemsRef: ItemDataRef<boolean | undefined>;
   typingRef: React.RefObject<boolean>;
@@ -61,6 +62,11 @@ export type Context = {
   itemTemplates: Map<number, (item: any, index: number) => React.ReactNode>;
   /** How to read the label and disabled state of each rendered item, with `range`. */
   renderedItems: Map<number, ListboxHiddenItemEntry>;
+  /**
+   * Commits a selection action. With `range`, a range that reaches many items that aren't
+   * rendered resolves over a few tasks, so it doesn't block the page.
+   */
+  commitSelection: (action: SelectionAction, eventDetails: ListboxRoot.ChangeEventDetails) => void;
 };
 
 /**
@@ -194,7 +200,7 @@ function createInitialState(): State {
 
 function createInitialContext(): Context {
   return {
-    valuesRef: { current: [] },
+    valuesRef: createItemDataRef(),
     labelsRef: createItemDataRef(),
     disabledItemsRef: createItemDataRef(),
     typingRef: { current: false },
@@ -205,5 +211,6 @@ function createInitialContext(): Context {
     onItemFocus: () => {},
     itemTemplates: new Map(),
     renderedItems: new Map(),
+    commitSelection: () => {},
   };
 }

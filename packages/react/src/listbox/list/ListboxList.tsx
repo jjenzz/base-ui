@@ -7,7 +7,6 @@ import { useRefWithInit } from '@base-ui/utils/useRefWithInit';
 import { useTimeout } from '@base-ui/utils/useTimeout';
 import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
-import { areArraysEqual } from '@base-ui/utils/areArraysEqual';
 import { ownerDocument } from '@base-ui/utils/owner';
 import type { BaseUIComponentProps, HTMLProps } from '../../internals/types';
 import { useRenderElement } from '../../internals/useRenderElement';
@@ -28,10 +27,28 @@ import { ListboxHiddenRoot, ListboxListGroupContext } from './ListboxHiddenItems
 import type { ListboxHiddenItemEntry } from './ListboxHiddenItems';
 import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
 
-// How many hidden items render at a time, and how long to wait after a change before refreshing
-// them in the background.
-const HIDDEN_CHUNK_SIZE = 200;
-const HIDDEN_REFRESH_DELAY = 100;
+// How many items are read at a time when the data of items that aren't rendered is needed.
+const MIN_READ_BATCH = 100;
+const MAX_READ_BATCH = 2000;
+// Selections spanning more items than this resolve a chunk per task.
+const ASYNC_RANGE_THRESHOLD = 1000;
+const RANGE_CHUNK_SIZE = 500;
+
+/** The first and last index a selection action reads, when it reads a range. */
+function getActionSpan(action: SelectionAction, count: number): [number, number] | null {
+  switch (action.type) {
+    case 'selectAll':
+      return count > 0 ? [0, count - 1] : null;
+    case 'selectRange':
+      return [Math.min(action.from, action.to), Math.max(action.from, action.to)];
+    case 'extendTo':
+      return action.anchorIndex === null
+        ? null
+        : [Math.min(action.anchorIndex, action.index), Math.max(action.anchorIndex, action.index)];
+    default:
+      return null;
+  }
+}
 
 /**
  * A container for the listbox items.
@@ -106,9 +123,18 @@ export const ListboxList = React.forwardRef(function ListboxList(
    * The item that should receive focus when the list receives focus: the first selected item,
    * or the first item when nothing is selected, as the APG listbox pattern describes.
    */
-  const getTabStopIndex = useStableCallback(() => {
-    const values = valuesRef.current;
+  const getTabStopIndex = useStableCallback((scan = false): number | null => {
     const { value: selectedValues, isItemEqualToValue } = store.state;
+    if (selectedValues.length === 0) {
+      return 0;
+    }
+    // With `range`, finding the first selected item reads the values of items that aren't
+    // rendered, which only happens in event handlers. Elsewhere, the list holds the tab stop and
+    // finds the item when it receives focus.
+    if (store.state.range != null && !scan) {
+      return null;
+    }
+    const values = valuesRef.current;
     for (let index = 0; index < values.length; index += 1) {
       if (
         index in values &&
@@ -254,16 +280,8 @@ export const ListboxList = React.forwardRef(function ListboxList(
       eventDetails: ListboxRoot.ChangeEventDetails,
       anchorIndex?: number,
     ) => {
-      const currentValue = store.state.value;
-      const isItemEqualToValue = store.state.isItemEqualToValue;
-      const nextValue = selectionReducer(
-        action,
-        currentValue,
-        valuesRef.current,
-        disabledItemsRef.current,
-        isItemEqualToValue,
-      );
-      setValue(nextValue, eventDetails);
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      commitSelection(action, eventDetails);
       if (anchorIndex !== undefined) {
         lastSelectedIndexRef.current = anchorIndex;
       }
@@ -283,8 +301,6 @@ export const ListboxList = React.forwardRef(function ListboxList(
     const isVertical = orientation === 'vertical';
     const currentIndex = store.state.activeIndex;
     const elements = composite.elementsRef.current;
-    const values = valuesRef.current;
-    const isItemEqualToValue = store.state.isItemEqualToValue;
 
     const count = itemCount ?? elements.length;
 
@@ -333,26 +349,17 @@ export const ListboxList = React.forwardRef(function ListboxList(
           const anchorIndex = shiftAnchorRef.current;
           focusItem(targetIndex, event.nativeEvent);
 
-          const currentValue = store.state.value;
-          const nextValue = selectionReducer(
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
+          commitSelection(
             { type: 'extendTo', index: targetIndex, anchorIndex },
-            currentValue,
-            values,
-            disabledItemsRef.current,
-            isItemEqualToValue,
+            createChangeEventDetails(REASONS.listNavigation, event.nativeEvent, undefined, {
+              range: {
+                from: Math.min(anchorIndex, targetIndex),
+                to: Math.max(anchorIndex, targetIndex),
+                mode: 'replace',
+              },
+            }),
           );
-          if (!areArraysEqual(currentValue, nextValue, isItemEqualToValue)) {
-            setValue(
-              nextValue,
-              createChangeEventDetails(REASONS.listNavigation, event.nativeEvent, undefined, {
-                range: {
-                  from: Math.min(anchorIndex, targetIndex),
-                  to: Math.max(anchorIndex, targetIndex),
-                  mode: 'replace',
-                },
-              }),
-            );
-          }
         }
       }
     }
@@ -437,7 +444,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
       }
       // The list isn't a tab stop, but it can receive focus programmatically, such as from a
       // `Listbox.Label` click. Pass focus on to the item that holds the tab stop.
-      const index = store.state.activeIndex ?? getTabStopIndex();
+      const index = store.state.activeIndex ?? getTabStopIndex(true) ?? 0;
       if (elements[index]) {
         elements[index].focus();
       } else if (itemCount != null && itemCount > 0) {
@@ -464,8 +471,13 @@ export const ListboxList = React.forwardRef(function ListboxList(
     onPointerDown() {
       // A new pointer press starts a new Shift+Arrow range from wherever focus lands.
       shiftAnchorRef.current = null;
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      resolveTimeout.clear();
     },
     onKeyDownCapture(event: React.KeyboardEvent) {
+      // A selection still being resolved is replaced by whatever this key does.
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      resolveTimeout.clear();
       // Typeahead runs before the items' handlers, so a typed key doesn't reach the item it moved
       // focus away from, and Space continues a search in progress instead of selecting.
       if (event.key === ' ') {
@@ -599,25 +611,19 @@ export const ListboxList = React.forwardRef(function ListboxList(
     content = children;
   }
 
-  // With `range`, the listbox renders every item into a detached fragment in the background, a
-  // chunk at a time, and reads what each item registers when typeahead or a selection needs it.
-  // When the items or a render function change, the chunks render again in the background. A
-  // read that reaches a chunk that hasn't caught up renders it right away, so it's never stale.
+  // With `range`, the listbox reads the labels and disabled states of items that aren't rendered
+  // only when something needs them, such as typeahead or selecting a range. It renders a batch of
+  // items around the one being read into a detached fragment, with the latest render function,
+  // and reads what each item registers. Nothing is kept between renders, so it's never stale.
   const hasCollection = range != null;
   const fragment = useRefWithInit(() =>
     typeof document === 'undefined' ? null : document.createDocumentFragment(),
   ).current;
   const registry = useRefWithInit(() => new Map<number, ListboxHiddenItemEntry>()).current;
-  const hiddenControllerRef = React.useRef<React.Dispatch<React.SetStateAction<number[]>> | null>(
-    null,
-  );
-  const committedVersions = useRefWithInit(() => [] as number[]).current;
-  const versionRef = React.useRef(0);
-  const signatureRef = React.useRef<{ items: readonly any[]; templates: unknown[] } | null>(null);
-  const fillTimeout = useTimeout();
+  const hiddenControllerRef = React.useRef<((indexes: number[]) => void) | null>(null);
 
   const renderHiddenItem = useStableCallback((index: number) => {
-    const { itemTemplates, valuesRef } = store.context;
+    const { itemTemplates } = store.context;
     let groupIndex = -1;
     let offset = 0;
     if (groupInfos) {
@@ -636,50 +642,148 @@ export const ListboxList = React.forwardRef(function ListboxList(
         template = candidate;
       });
     }
-    return template ? template(valuesRef.current[index], index - offset) : null;
+    return template ? template(store.state.items?.[index], index - offset) : null;
   });
 
-  const renderChunk = (chunk: number) => {
-    const chunkCount = Math.ceil((store.state.items?.length ?? 0) / HIDDEN_CHUNK_SIZE);
-    const version = versionRef.current;
-    hiddenControllerRef.current?.((previous) => {
-      const next = previous.slice(0, chunkCount);
-      while (next.length < chunkCount) {
-        next.push(-1);
-      }
-      next[chunk] = version;
-      return next;
-    });
-  };
+  // What's been read since the list last rendered. Batches grow while a scan keeps going in one
+  // direction, so reading every item takes a handful of batches.
+  const readCacheRef = React.useRef({
+    labels: [] as Array<string | null>,
+    disabled: [] as boolean[],
+    values: [] as any[],
+    batchStart: -1,
+    batchEnd: -1,
+    batchSize: 0,
+  });
 
-  // Renders the next chunk that hasn't caught up, one per task.
-  const fillNextChunk = useStableCallback(() => {
-    const chunkCount = Math.ceil((store.state.items?.length ?? 0) / HIDDEN_CHUNK_SIZE);
-    for (let chunk = 0; chunk < chunkCount; chunk += 1) {
-      if (committedVersions[chunk] !== versionRef.current) {
-        renderChunk(chunk);
-        fillTimeout.start(0, fillNextChunk);
+  // Reads the data of an item that isn't rendered, rendering a batch of items around it. Labels
+  // are only read when asked for, since nested text has to render to be read.
+  const readItem = useStableCallback((index: number, label: boolean) => {
+    const cache = readCacheRef.current;
+    const isRead = (position: number) =>
+      label ? position in cache.labels : position in cache.disabled;
+    if (isRead(index)) {
+      return;
+    }
+    const count = store.state.items?.length ?? 0;
+    let start: number;
+    let end: number;
+    if (index === cache.batchEnd) {
+      cache.batchSize = Math.min(cache.batchSize * 2, MAX_READ_BATCH);
+      start = index;
+      end = Math.min(count, index + cache.batchSize);
+    } else if (index === cache.batchStart - 1) {
+      cache.batchSize = Math.min(cache.batchSize * 2, MAX_READ_BATCH);
+      start = Math.max(0, index - cache.batchSize + 1);
+      end = index + 1;
+    } else {
+      cache.batchSize = MIN_READ_BATCH;
+      start = Math.max(0, index - MIN_READ_BATCH / 2);
+      end = Math.min(count, start + MIN_READ_BATCH);
+    }
+    cache.batchStart = start;
+    cache.batchEnd = end;
+
+    const indexes: number[] = [];
+    for (let position = start; position < end; position += 1) {
+      if (!isRead(position)) {
+        indexes.push(position);
+      }
+    }
+    ReactDOM.flushSync(() => {
+      hiddenControllerRef.current?.({ indexes, text: label });
+    });
+    // Flushing can also commit a render of the list, which starts a new cache, so the data goes
+    // into the current one.
+    const current = readCacheRef.current;
+    for (const position of indexes) {
+      const entry = registry.get(position);
+      current.values[position] = entry?.value;
+      current.disabled[position] = entry?.disabled ?? false;
+      if (label) {
+        current.labels[position] = entry ? entry.getLabel() : null;
+      }
+    }
+  });
+
+  // Reads the values and disabled states of a span of items into `values` and `disabled`.
+  const readRange = useStableCallback(
+    (start: number, end: number, values: any[], disabled: boolean[]) => {
+      const missing: number[] = [];
+      for (let index = start; index < end; index += 1) {
+        const rendered = store.context.renderedItems.get(index);
+        if (rendered) {
+          values[index] = rendered.value;
+          disabled[index] = rendered.disabled;
+        } else {
+          missing.push(index);
+        }
+      }
+      if (missing.length === 0) {
         return;
       }
-    }
-  });
-
-  // Renders the chunk with an item right away when it hasn't caught up.
-  const readHiddenItem = useStableCallback((index: number) => {
-    const chunk = Math.floor(index / HIDDEN_CHUNK_SIZE);
-    if (committedVersions[chunk] !== versionRef.current) {
       ReactDOM.flushSync(() => {
-        renderChunk(chunk);
+        hiddenControllerRef.current?.({ indexes: missing, text: false });
       });
-    }
-    return registry.get(index);
-  });
+      for (const index of missing) {
+        const entry = registry.get(index);
+        values[index] = entry?.value;
+        disabled[index] = entry?.disabled ?? false;
+      }
+    },
+  );
+
+  // A selection that spans many items resolves a chunk at a time, so it doesn't block the page,
+  // and commits once. A new key or pointer press cancels it.
+  const resolveTimeout = useTimeout();
+  const commitSelection = useStableCallback(
+    (action: SelectionAction, eventDetails: ListboxRoot.ChangeEventDetails) => {
+      resolveTimeout.clear();
+      const commit = (values: any[], disabled: Array<boolean | undefined>) => {
+        setValue(
+          selectionReducer(
+            action,
+            store.state.value,
+            values,
+            disabled,
+            store.state.isItemEqualToValue,
+          ),
+          eventDetails,
+        );
+      };
+
+      const count = store.state.items?.length ?? 0;
+      const span = store.state.range != null ? getActionSpan(action, count) : null;
+      if (!span || span[1] - span[0] + 1 <= ASYNC_RANGE_THRESHOLD) {
+        commit(valuesRef.current, disabledItemsRef.current);
+        return;
+      }
+
+      const values: any[] = new Array(count);
+      const disabled: boolean[] = new Array(count);
+      let next = span[0];
+      const resolveChunk = () => {
+        const end = Math.min(span[1] + 1, next + RANGE_CHUNK_SIZE);
+        readRange(next, end, values, disabled);
+        next = end;
+        if (next > span[1]) {
+          commit(values, disabled);
+        } else {
+          resolveTimeout.start(0, resolveChunk);
+        }
+      };
+      resolveTimeout.start(0, resolveChunk);
+    },
+  );
+  store.useContextCallback('commitSelection', commitSelection);
 
   useIsoLayoutEffect(() => {
     const { labelsRef: labelData, disabledItemsRef: disabledData } = store.context;
+    const { valuesRef: valueData } = store.context;
     if (!hasCollection) {
       labelData.setReader(null);
       disabledData.setReader(null);
+      valueData.setReader(null);
       return;
     }
     const length = () => store.state.items?.length ?? 0;
@@ -690,7 +794,8 @@ export const ListboxList = React.forwardRef(function ListboxList(
         if (rendered) {
           return rendered.getLabel();
         }
-        return readHiddenItem(index)?.getLabel() ?? null;
+        readItem(index, true);
+        return readCacheRef.current.labels[index] ?? null;
       },
     });
     disabledData.setReader({
@@ -700,32 +805,33 @@ export const ListboxList = React.forwardRef(function ListboxList(
         if (rendered) {
           return rendered.disabled;
         }
-        return readHiddenItem(index)?.disabled ?? false;
+        readItem(index, false);
+        return readCacheRef.current.disabled[index] ?? false;
       },
     });
-  }, [hasCollection, readHiddenItem, store]);
+    valueData.setReader({
+      length,
+      get(index) {
+        const rendered = store.context.renderedItems.get(index);
+        if (rendered) {
+          return rendered.value;
+        }
+        readItem(index, false);
+        return readCacheRef.current.values[index];
+      },
+    });
+  }, [hasCollection, readItem, store]);
 
-  // A new version starts when the items or a render function change. Render functions are often
-  // new on every render of the consumer's component, so the refresh waits for renders to pause.
+  // Any render can change what the render functions return, so reads start fresh.
   useIsoLayoutEffect(() => {
-    if (!hasCollection || !items) {
-      signatureRef.current = null;
-      fillTimeout.clear();
-      return;
-    }
-    const templates = Array.from(store.context.itemTemplates.values());
-    const previous = signatureRef.current;
-    if (
-      previous &&
-      previous.items === items &&
-      previous.templates.length === templates.length &&
-      previous.templates.every((template, index) => template === templates[index])
-    ) {
-      return;
-    }
-    signatureRef.current = { items, templates };
-    versionRef.current += 1;
-    fillTimeout.start(previous ? HIDDEN_REFRESH_DELAY : 0, fillNextChunk);
+    readCacheRef.current = {
+      labels: [],
+      disabled: [],
+      values: [],
+      batchStart: -1,
+      batchEnd: -1,
+      batchSize: 0,
+    };
   });
 
   const collection =
@@ -735,9 +841,6 @@ export const ListboxList = React.forwardRef(function ListboxList(
             controllerRef={hiddenControllerRef}
             registry={registry}
             renderItem={renderHiddenItem}
-            committedVersions={committedVersions}
-            count={itemCount ?? 0}
-            chunkSize={HIDDEN_CHUNK_SIZE}
           />,
           fragment,
         )

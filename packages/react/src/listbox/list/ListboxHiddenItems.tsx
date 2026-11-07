@@ -72,76 +72,97 @@ export function createItemDataRef<T>(): ItemDataRef<T> {
 export interface ListboxHiddenItemEntry {
   getLabel: () => string | null;
   disabled: boolean;
+  value: any;
 }
 
 /**
  * Present while `Listbox.Item` renders into the hidden root, which renders the items whose data
- * is being read. Each item registers how to read its label and disabled state here.
+ * is being read. Each item registers how to read its data here.
  */
 export const ListboxCollectionContext = React.createContext<Map<
   number,
   ListboxHiddenItemEntry
 > | null>(null);
 
+/** Whether the hidden root is reading labels, so items whose text is nested need to render it. */
+const ListboxHiddenTextContext = React.createContext(false);
+
 export interface ListboxCollectionItemProps {
   label: string | undefined;
   disabled: boolean;
+  value: any;
   children: React.ReactNode;
 }
 
+function getPlainText(children: React.ReactNode): string | null {
+  if (typeof children === 'string' || typeof children === 'number') {
+    return String(children);
+  }
+  return null;
+}
+
 /**
- * An item in the hidden root: a bare `<span>` that renders the item's text when it has no
- * `label`, and registers how to read its label and disabled state. The text is only read when
- * it's needed.
+ * An item in the hidden root. It registers its value, disabled state and how to read its label.
+ * It renders nothing, except a bare `<span>` with its text when labels are being read and its
+ * text is nested in elements, so the text can be read from the DOM.
  */
 export const ListboxCollectionItem = React.memo(function ListboxCollectionItem(
   props: ListboxCollectionItemProps,
 ) {
-  const { label, disabled, children } = props;
+  const { label, disabled, value, children } = props;
   const registry = React.useContext(ListboxCollectionContext);
+  const readingText = React.useContext(ListboxHiddenTextContext);
   const index = React.useContext(ListboxItemIndexContext) ?? -1;
+  const textRef = React.useRef<HTMLSpanElement>(null);
 
-  const ref = React.useCallback(
-    (element: HTMLElement | null) => {
-      if (!registry || index === -1) {
-        return;
-      }
-      if (element) {
-        registry.set(index, { getLabel: () => label ?? element.textContent, disabled });
-      } else {
-        registry.delete(index);
-      }
-    },
-    [registry, index, label, disabled],
-  );
+  const plainText = label ?? getPlainText(children);
+  const rendersText = readingText && plainText == null;
 
-  return <span ref={ref}>{label == null ? children : null}</span>;
+  useIsoLayoutEffect(() => {
+    if (!registry || index === -1) {
+      return undefined;
+    }
+    registry.set(index, {
+      getLabel: () => plainText ?? textRef.current?.textContent ?? null,
+      disabled,
+      value,
+    });
+    return () => {
+      registry.delete(index);
+    };
+  }, [registry, index, plainText, disabled, value, rendersText]);
+
+  return rendersText ? <span ref={textRef}>{children}</span> : null;
 });
 
+export interface ListboxHiddenBatch {
+  indexes: number[];
+  /** Whether labels are being read, so nested text renders. */
+  text: boolean;
+}
+
 export interface ListboxHiddenRootProps {
-  /** Receives the function that sets which version each chunk renders, or `-1` for none. */
-  controllerRef: React.RefObject<React.Dispatch<React.SetStateAction<number[]>> | null>;
+  /** Receives the function that sets which items render. */
+  controllerRef: React.RefObject<((batch: ListboxHiddenBatch) => void) | null>;
   registry: Map<number, ListboxHiddenItemEntry>;
   /** Renders the item at an index with the latest render function. */
   renderItem: (index: number) => React.ReactNode;
-  /** The version each chunk last committed, written by the chunks. */
-  committedVersions: number[];
-  count: number;
-  chunkSize: number;
 }
 
+const EMPTY_BATCH: ListboxHiddenBatch = { indexes: [], text: false };
+
 /**
- * Renders the items into a detached fragment, in chunks, so the data of items that aren't
- * rendered is ready to read. It only renders when asked to, not when the list renders.
+ * Renders the items whose data is being read, into a detached fragment. It only renders when
+ * asked to, not when the list renders.
  */
 export const ListboxHiddenRoot = React.memo(function ListboxHiddenRoot(
   props: ListboxHiddenRootProps,
 ) {
-  const { controllerRef, registry, renderItem, committedVersions, count, chunkSize } = props;
-  const [chunkVersions, setChunkVersions] = React.useState<number[]>([]);
+  const { controllerRef, registry, renderItem } = props;
+  const [batch, setBatch] = React.useState(EMPTY_BATCH);
 
   useIsoLayoutEffect(() => {
-    controllerRef.current = setChunkVersions;
+    controllerRef.current = setBatch;
     return () => {
       controllerRef.current = null;
     };
@@ -149,53 +170,13 @@ export const ListboxHiddenRoot = React.memo(function ListboxHiddenRoot(
 
   return (
     <ListboxCollectionContext.Provider value={registry}>
-      {chunkVersions.map((version, chunk) =>
-        version < 0 || chunk * chunkSize >= count ? null : (
-          <ListboxHiddenChunk
-            key={chunk}
-            chunk={chunk}
-            start={chunk * chunkSize}
-            end={Math.min(count, (chunk + 1) * chunkSize)}
-            version={version}
-            renderItem={renderItem}
-            committedVersions={committedVersions}
-          />
-        ),
-      )}
+      <ListboxHiddenTextContext.Provider value={batch.text}>
+        {batch.indexes.map((index) => (
+          <ListboxItemIndexContext.Provider key={index} value={index}>
+            {renderItem(index)}
+          </ListboxItemIndexContext.Provider>
+        ))}
+      </ListboxHiddenTextContext.Provider>
     </ListboxCollectionContext.Provider>
   );
-});
-
-interface ListboxHiddenChunkProps {
-  chunk: number;
-  start: number;
-  end: number;
-  version: number;
-  renderItem: (index: number) => React.ReactNode;
-  committedVersions: number[];
-}
-
-/**
- * A chunk of hidden items. It renders again only when its version changes, and its items only
- * render again when their data changed.
- */
-const ListboxHiddenChunk = React.memo(function ListboxHiddenChunk(props: ListboxHiddenChunkProps) {
-  const { chunk, start, end, version, renderItem, committedVersions } = props;
-
-  useIsoLayoutEffect(() => {
-    committedVersions[chunk] = version;
-    return () => {
-      committedVersions[chunk] = -1;
-    };
-  }, [chunk, version, committedVersions]);
-
-  const rendered: React.ReactNode[] = [];
-  for (let index = start; index < end; index += 1) {
-    rendered.push(
-      <ListboxItemIndexContext.Provider key={index} value={index}>
-        {renderItem(index)}
-      </ListboxItemIndexContext.Provider>,
-    );
-  }
-  return <React.Fragment>{rendered}</React.Fragment>;
 });
