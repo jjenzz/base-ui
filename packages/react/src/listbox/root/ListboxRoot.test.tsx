@@ -2833,6 +2833,38 @@ describe('<Listbox.Root />', () => {
     });
   });
 
+  describe('prop: range read-ahead', () => {
+    it('reads labels ahead only part of the way through a long list', async () => {
+      const names = Array.from({ length: 5000 }, (_, index) => `Row ${index}`);
+      const readIndexes = new Set<number>();
+
+      await render(
+        <Listbox.Root items={names} range={{ start: 0, end: 4 }}>
+          <Listbox.List aria-label="Rows">
+            {(name: string, index: number) => {
+              if (index > 4) {
+                readIndexes.add(index);
+              }
+              return <Listbox.Item value={name}>{name}</Listbox.Item>;
+            }}
+          </Listbox.List>
+        </Listbox.Root>,
+      );
+      await act(async () => screen.getByRole('option', { name: 'Row 0' }).focus());
+
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'r' });
+      await act(async () => {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 400);
+        });
+      });
+
+      // Reads on from the highlighted item, but stops well short of the whole list.
+      expect(readIndexes.has(1000)).toBe(true);
+      expect(readIndexes.has(4000)).toBe(false);
+    });
+  });
+
   describe('prop: items (grouped)', () => {
     interface ProduceGroup {
       name: string;

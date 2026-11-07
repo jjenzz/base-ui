@@ -35,8 +35,10 @@ const MAX_READ_BATCH = 2000;
 const ASYNC_RANGE_THRESHOLD = 1000;
 const RANGE_CHUNK_SIZE = 250;
 const RANGE_SLICE_MS = 8;
-// How long each slice of reading labels ahead runs for during a typing session.
+// How long each slice of reading labels ahead runs for during a typing session, and how far past
+// the highlighted item it reads.
 const READ_AHEAD_SLICE_MS = 8;
+const READ_AHEAD_DISTANCE = 2000;
 
 /**
  * Runs callbacks after yielding to the browser, with a message rather than a timer, since browsers
@@ -837,28 +839,45 @@ export const ListboxList = React.forwardRef(function ListboxList(
   store.useContextCallback('commitSelection', commitSelection);
 
   // During a typing session, labels after the highlighted item are read ahead between keystrokes,
-  // in the order typeahead searches them, so a match far down the list is usually already read.
+  // in the order typeahead searches them, so a match further down the list is usually already
+  // read. Each key moves the window to READ_AHEAD_DISTANCE items past wherever the search landed.
+  // Positions keep counting past the end of the list, which wraps to the start like typeahead.
   const readAheadYield = useBrowserYield();
-  const readAheadRef = React.useRef<{ cursor: number; read: number } | null>(null);
+  const readAheadRef = React.useRef<{ cursor: number; end: number; running: boolean } | null>(null);
   const stopReadAhead = useStableCallback(() => {
     readAheadYield.cancel();
     readAheadRef.current = null;
   });
   const startReadAhead = useStableCallback(() => {
     const count = store.state.items?.length ?? 0;
-    if (store.state.range == null || readAheadRef.current || count === 0) {
+    if (store.state.range == null || count === 0) {
       return;
     }
-    const state = { cursor: (store.state.activeIndex ?? -1) + 1, read: 0 };
-    readAheadRef.current = state;
-    const token = readAheadYield.token();
+    const from = (store.state.activeIndex ?? -1) + 1;
+    const end = from + Math.min(READ_AHEAD_DISTANCE, count);
+    let state = readAheadRef.current;
+    if (!state) {
+      state = { cursor: from, end, running: false };
+      readAheadRef.current = state;
+    } else {
+      // Skip what the search has already moved past, and read on from where it landed.
+      if (from > state.cursor) {
+        state.cursor = from;
+      }
+      state.end = Math.max(state.end, end);
+    }
+    if (state.running) {
+      return;
+    }
+    state.running = true;
+    const current = state;
     const readSlice = () => {
-      if (token !== readAheadYield.token()) {
+      if (readAheadRef.current !== current) {
         return;
       }
       const sliceStart = performance.now();
-      while (state.read < count && performance.now() - sliceStart < READ_AHEAD_SLICE_MS) {
-        const index = state.cursor % count;
+      while (current.cursor < current.end && performance.now() - sliceStart < READ_AHEAD_SLICE_MS) {
+        const index = current.cursor % count;
         const rendered = store.context.renderedItems.get(index);
         if (rendered) {
           // Kept too, since the item may scroll out of the window before typeahead reads it.
@@ -869,11 +888,12 @@ export const ListboxList = React.forwardRef(function ListboxList(
         } else {
           readItem(index, true);
         }
-        state.cursor += 1;
-        state.read += 1;
+        current.cursor += 1;
       }
-      if (state.read < count) {
+      if (current.cursor < current.end) {
         readAheadYield.schedule(readSlice);
+      } else {
+        current.running = false;
       }
     };
     readAheadYield.schedule(readSlice);
