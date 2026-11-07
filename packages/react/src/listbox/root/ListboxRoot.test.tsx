@@ -2778,6 +2778,61 @@ describe('<Listbox.Root />', () => {
     });
   });
 
+  describe('prop: range typeahead', () => {
+    const ROW_NAMES = Array.from({ length: 600 }, (_, index) => `Row ${index}`);
+
+    it('reads labels ahead between keystrokes', async () => {
+      const outsideReads = { count: 0 };
+
+      function RowWindow() {
+        const [start, setStart] = React.useState(0);
+        return (
+          <Listbox.Root
+            items={ROW_NAMES}
+            range={{ start, end: start + 4 }}
+            onItemHighlighted={(_, { index }) => {
+              if (index !== -1 && (index < start || index > start + 4)) {
+                setStart(Math.min(index, ROW_NAMES.length - 5));
+              }
+            }}
+          >
+            <Listbox.List aria-label="Rows">
+              {(name: string, index: number) => {
+                // Rendering an item outside the window means its data is being read.
+                if (index < start || index > start + 4) {
+                  outsideReads.count += 1;
+                }
+                return <Listbox.Item value={name}>{name}</Listbox.Item>;
+              }}
+            </Listbox.List>
+          </Listbox.Root>
+        );
+      }
+
+      await render(<RowWindow />);
+      await act(async () => screen.getByRole('option', { name: 'Row 0' }).focus());
+
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'r' });
+      await flushMicrotasks();
+      // A pause between keys, shorter than the typing session.
+      await act(async () => {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 250);
+        });
+      });
+
+      outsideReads.count = 0;
+      for (const key of 'ow 599') {
+        fireEvent.keyDown(document.activeElement as HTMLElement, { key });
+        // eslint-disable-next-line no-await-in-loop
+        await flushMicrotasks();
+      }
+
+      expect(screen.getByRole('option', { name: 'Row 599' })).toHaveFocus();
+      expect(outsideReads.count).toBe(0);
+    });
+  });
+
   describe('prop: items (grouped)', () => {
     interface ProduceGroup {
       name: string;

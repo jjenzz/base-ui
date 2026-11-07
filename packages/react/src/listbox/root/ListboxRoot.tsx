@@ -13,7 +13,7 @@ import type {
 import type { REASONS } from '../../internals/reasons';
 import { useBaseUiId } from '../../internals/useBaseUiId';
 import { defaultItemEquality } from '../../internals/itemEquality';
-import { ListboxRootContext } from './ListboxRootContext';
+import { ListboxItemsContext, ListboxRootContext } from './ListboxRootContext';
 import { ListboxStore } from '../store';
 import { createItemDataRef } from '../list/ListboxHiddenItems';
 import { flattenLeafItems, isGroupedItems } from '../../internals/resolveValueLabel';
@@ -158,7 +158,16 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     onItemHighlighted,
   });
 
-  return <ListboxRootContext.Provider value={store}>{children}</ListboxRootContext.Provider>;
+  const itemsContext = React.useMemo(
+    () => ({ items, itemGroups, range }),
+    [items, itemGroups, range],
+  );
+
+  return (
+    <ListboxRootContext.Provider value={store}>
+      <ListboxItemsContext.Provider value={itemsContext}>{children}</ListboxItemsContext.Provider>
+    </ListboxRootContext.Provider>
+  );
 }
 
 type ListboxInputValue<Value, Multiple extends boolean | 'opt-in' | undefined> = Multiple extends

@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
-import { useListboxRootContext } from '../root/ListboxRootContext';
+import { ListboxItemsContext, useListboxRootContext } from '../root/ListboxRootContext';
 import { useListboxGroupContext } from '../group/ListboxGroupContext';
 import { ListboxItemIndexContext, ListboxListGroupContext } from '../list/ListboxHiddenItems';
 
@@ -20,8 +20,7 @@ export function ListboxCollection(props: ListboxCollection.Props): React.JSX.Ele
   const { children } = props;
 
   const store = useListboxRootContext();
-  const items = store.useState('items');
-  const range = store.useState('range');
+  const { items, range } = React.useContext(ListboxItemsContext);
   const listGroup = React.useContext(ListboxListGroupContext);
   const groupItems = useListboxGroupContext(true)?.items;
 

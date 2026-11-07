@@ -19,7 +19,7 @@ import { useCompositeRoot, CompositeList } from '../../internals/composite';
 import { activeElement, contains } from '../../floating-ui-react/utils';
 import { stopEvent } from '../../floating-ui-react/utils/event';
 import { useTypeahead } from '../../floating-ui-react';
-import { useListboxRootContext } from '../root/ListboxRootContext';
+import { ListboxItemsContext, useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { selectionReducer } from '../utils/selectionReducer';
 import type { SelectionAction } from '../utils/selectionReducer';
@@ -28,13 +28,54 @@ import type { ListboxHiddenItemEntry } from './ListboxHiddenItems';
 import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
 
 // How many items are read at a time when the data of items that aren't rendered is needed.
-const MIN_READ_BATCH = 100;
+const MIN_READ_BATCH = 250;
 const MAX_READ_BATCH = 2000;
 // Selections spanning more items than this resolve over several tasks, each working for about
 // RANGE_SLICE_MS, reading RANGE_CHUNK_SIZE items at a time.
 const ASYNC_RANGE_THRESHOLD = 1000;
 const RANGE_CHUNK_SIZE = 250;
 const RANGE_SLICE_MS = 8;
+// How long each slice of reading labels ahead runs for during a typing session.
+const READ_AHEAD_SLICE_MS = 8;
+
+/**
+ * Runs callbacks after yielding to the browser, with a message rather than a timer, since browsers
+ * delay nested timers by at least 4 ms. `cancel` drops anything scheduled; `token` changes on each
+ * cancel, so a loop can tell it was cancelled.
+ */
+function useBrowserYield() {
+  const channelRef = React.useRef<MessageChannel | null>(null);
+  const tokenRef = React.useRef(0);
+  const timeout = useTimeout();
+
+  React.useEffect(
+    () => () => {
+      tokenRef.current += 1;
+      channelRef.current?.port1.close();
+      channelRef.current = null;
+    },
+    [],
+  );
+
+  return useRefWithInit(() => ({
+    token: () => tokenRef.current,
+    cancel() {
+      tokenRef.current += 1;
+      timeout.clear();
+    },
+    schedule(callback: () => void) {
+      if (typeof MessageChannel === 'undefined') {
+        timeout.start(0, callback);
+        return;
+      }
+      if (!channelRef.current) {
+        channelRef.current = new MessageChannel();
+      }
+      channelRef.current.port1.onmessage = () => callback();
+      channelRef.current.port2.postMessage(null);
+    },
+  })).current;
+}
 
 /** The first and last index a selection action reads, when it reads a range. */
 function getActionSpan(action: SelectionAction, count: number): [number, number] | null {
@@ -72,9 +113,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
   const orientation = store.useState('orientation');
   const disabled = store.useState('disabled');
   const multiple = store.useState('multiple');
-  const items = store.useState('items');
-  const itemGroups = store.useState('itemGroups');
-  const range = store.useState('range');
+  const { items, itemGroups, range } = React.useContext(ListboxItemsContext);
   // With `items`, the list knows every item, including those that aren't rendered.
   const itemCount = items?.length;
   const activeItemRendered = store.useState('activeItemRendered');
@@ -266,6 +305,10 @@ export const ListboxList = React.forwardRef(function ListboxList(
     resetMs: TYPEAHEAD_RESET_MS,
     onTyping(isTyping) {
       typingRef.current = isTyping;
+      if (!isTyping) {
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        stopReadAhead();
+      }
     },
     onMatch(index, event) {
       focusItem(index, event.nativeEvent);
@@ -503,6 +546,10 @@ export const ListboxList = React.forwardRef(function ListboxList(
         }
       }
       typeahead.onKeyDown(event);
+      if (typingRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        startReadAhead();
+      }
     },
     onKeyDown(event: React.KeyboardEvent) {
       if (disabled) {
@@ -679,9 +726,10 @@ export const ListboxList = React.forwardRef(function ListboxList(
       start = Math.max(0, index - cache.batchSize + 1);
       end = index + 1;
     } else {
+      // Reads usually continue forward, such as typeahead searching on from the highlighted item.
       cache.batchSize = MIN_READ_BATCH;
-      start = Math.max(0, index - MIN_READ_BATCH / 2);
-      end = Math.min(count, start + MIN_READ_BATCH);
+      start = index;
+      end = Math.min(count, index + MIN_READ_BATCH);
     }
     cache.batchStart = start;
     cache.batchEnd = end;
@@ -737,35 +785,8 @@ export const ListboxList = React.forwardRef(function ListboxList(
 
   // A selection that spans many items resolves a chunk at a time, so it doesn't block the page,
   // and commits once. A new key or pointer press cancels it.
-  // Yields to the browser between slices with a message rather than a timer, since browsers delay
-  // nested timers by at least 4 ms. Each resolve gets a token, and a newer one cancels it.
-  const resolveTokenRef = React.useRef(0);
-  const channelRef = React.useRef<MessageChannel | null>(null);
-  const resolveTimeout = useTimeout();
-  const cancelResolve = useStableCallback(() => {
-    resolveTokenRef.current += 1;
-    resolveTimeout.clear();
-  });
-  const yieldToBrowser = useStableCallback((callback: () => void) => {
-    if (typeof MessageChannel === 'undefined') {
-      resolveTimeout.start(0, callback);
-      return;
-    }
-    if (!channelRef.current) {
-      channelRef.current = new MessageChannel();
-    }
-    const channel = channelRef.current;
-    channel.port1.onmessage = () => callback();
-    channel.port2.postMessage(null);
-  });
-  React.useEffect(
-    () => () => {
-      resolveTokenRef.current += 1;
-      channelRef.current?.port1.close();
-      channelRef.current = null;
-    },
-    [],
-  );
+  const resolveYield = useBrowserYield();
+  const cancelResolve = resolveYield.cancel;
 
   const commitSelection = useStableCallback(
     (action: SelectionAction, eventDetails: ListboxRoot.ChangeEventDetails) => {
@@ -792,10 +813,10 @@ export const ListboxList = React.forwardRef(function ListboxList(
 
       const values: any[] = new Array(count);
       const disabled: boolean[] = new Array(count);
-      const token = resolveTokenRef.current;
+      const token = resolveYield.token();
       let next = span[0];
       const resolveSlice = () => {
-        if (token !== resolveTokenRef.current) {
+        if (token !== resolveYield.token()) {
           return;
         }
         const sliceStart = performance.now();
@@ -807,13 +828,56 @@ export const ListboxList = React.forwardRef(function ListboxList(
         if (next > span[1]) {
           commit(values, disabled);
         } else {
-          yieldToBrowser(resolveSlice);
+          resolveYield.schedule(resolveSlice);
         }
       };
-      yieldToBrowser(resolveSlice);
+      resolveYield.schedule(resolveSlice);
     },
   );
   store.useContextCallback('commitSelection', commitSelection);
+
+  // During a typing session, labels after the highlighted item are read ahead between keystrokes,
+  // in the order typeahead searches them, so a match far down the list is usually already read.
+  const readAheadYield = useBrowserYield();
+  const readAheadRef = React.useRef<{ cursor: number; read: number } | null>(null);
+  const stopReadAhead = useStableCallback(() => {
+    readAheadYield.cancel();
+    readAheadRef.current = null;
+  });
+  const startReadAhead = useStableCallback(() => {
+    const count = store.state.items?.length ?? 0;
+    if (store.state.range == null || readAheadRef.current || count === 0) {
+      return;
+    }
+    const state = { cursor: (store.state.activeIndex ?? -1) + 1, read: 0 };
+    readAheadRef.current = state;
+    const token = readAheadYield.token();
+    const readSlice = () => {
+      if (token !== readAheadYield.token()) {
+        return;
+      }
+      const sliceStart = performance.now();
+      while (state.read < count && performance.now() - sliceStart < READ_AHEAD_SLICE_MS) {
+        const index = state.cursor % count;
+        const rendered = store.context.renderedItems.get(index);
+        if (rendered) {
+          // Kept too, since the item may scroll out of the window before typeahead reads it.
+          const cache = readCacheRef.current;
+          cache.labels[index] = rendered.getLabel();
+          cache.values[index] = rendered.value;
+          cache.disabled[index] = rendered.disabled;
+        } else {
+          readItem(index, true);
+        }
+        state.cursor += 1;
+        state.read += 1;
+      }
+      if (state.read < count) {
+        readAheadYield.schedule(readSlice);
+      }
+    };
+    readAheadYield.schedule(readSlice);
+  });
 
   useIsoLayoutEffect(() => {
     const { labelsRef: labelData, disabledItemsRef: disabledData } = store.context;
@@ -860,12 +924,15 @@ export const ListboxList = React.forwardRef(function ListboxList(
     });
   }, [hasCollection, readItem, store]);
 
-  // Any render can change what the render functions return, so reads start fresh. Labels read
-  // during a typing session are kept until it ends: typing moves the highlight, which usually
+  // Any render can change what the render functions return, so reads start fresh. What's read
+  // during a typing session is kept until it ends: typing moves the highlight, which usually
   // scrolls and renders the list, and the search is for what the user saw when they started typing.
   useIsoLayoutEffect(() => {
+    if (typingRef.current) {
+      return;
+    }
     readCacheRef.current = {
-      labels: typingRef.current ? readCacheRef.current.labels : [],
+      labels: [],
       disabled: [],
       values: [],
       batchStart: -1,
