@@ -15,7 +15,7 @@ import { useBaseUiId } from '../../internals/useBaseUiId';
 import { defaultItemEquality } from '../../internals/itemEquality';
 import { ListboxItemsContext, ListboxRootContext } from './ListboxRootContext';
 import { ListboxStore } from '../store';
-import { createItemDataRef } from '../list/ListboxHiddenItems';
+import { createItemDataRef } from '../utils/itemData';
 import { flattenLeafItems, isGroupedItems } from '../../internals/resolveValueLabel';
 import { useHighlightChangeNotifier } from '../utils/useHighlightChangeNotifier';
 

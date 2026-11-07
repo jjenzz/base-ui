@@ -1,90 +1,18 @@
 'use client';
 import * as React from 'react';
 import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
+import { ListboxItemIndexContext } from '../collection/ListboxCollectionContext';
+import type { ListboxItemData } from '../utils/itemData';
 
 /**
- * The position of the item being rendered by `Listbox.List`'s render function.
+ * Present while items render into the hidden root, which renders the items whose data is being
+ * read. Each item registers its data here, by position.
  */
-export const ListboxItemIndexContext = React.createContext<number | undefined>(undefined);
+export const ListboxHiddenItemsContext = React.createContext<Map<number, ListboxItemData> | null>(
+  null,
+);
 
-/**
- * The group being rendered by `Listbox.List`'s render function, with the position of its first
- * item in the whole list.
- */
-export const ListboxListGroupContext = React.createContext<
-  { index: number; offset: number } | undefined
->(undefined);
-
-export interface ItemDataReader<T> {
-  length: () => number;
-  get: (index: number) => T;
-}
-
-/**
- * A ref to a list of item data, such as labels. Parts write into it directly, or, with a reader,
- * each entry is read when it's accessed, so data is only loaded for the items that need it.
- */
-export interface ItemDataRef<T> extends React.RefObject<T[]> {
-  setReader: (reader: ItemDataReader<T> | null) => void;
-}
-
-function toIndex(property: string | symbol) {
-  if (typeof property !== 'string') {
-    return -1;
-  }
-  const index = Number(property);
-  return Number.isInteger(index) && index >= 0 && String(index) === property ? index : -1;
-}
-
-export function createItemDataRef<T>(): ItemDataRef<T> {
-  let values: T[] = [];
-  let view: T[] | null = null;
-  return {
-    setReader(reader) {
-      view = reader
-        ? new Proxy([] as T[], {
-            get(target, property, receiver) {
-              if (property === 'length') {
-                return reader.length();
-              }
-              const index = toIndex(property);
-              return index === -1 ? Reflect.get(target, property, receiver) : reader.get(index);
-            },
-            has(target, property) {
-              const index = toIndex(property);
-              return index === -1 ? Reflect.has(target, property) : index < reader.length();
-            },
-            set() {
-              return true;
-            },
-          })
-        : null;
-    },
-    get current() {
-      return view ?? values;
-    },
-    set current(next: T[]) {
-      values = next;
-    },
-  };
-}
-
-export interface ListboxHiddenItemEntry {
-  getLabel: () => string | null;
-  disabled: boolean;
-  value: any;
-}
-
-/**
- * Present while `Listbox.Item` renders into the hidden root, which renders the items whose data
- * is being read. Each item registers how to read its data here.
- */
-export const ListboxCollectionContext = React.createContext<Map<
-  number,
-  ListboxHiddenItemEntry
-> | null>(null);
-
-/** Whether the hidden root is reading labels, so items whose text is nested need to render it. */
+/** Whether labels are being read, so items whose text is nested in elements render it. */
 const ListboxHiddenTextContext = React.createContext(false);
 
 function getPlainText(children: React.ReactNode): string | null {
@@ -95,21 +23,21 @@ function getPlainText(children: React.ReactNode): string | null {
 }
 
 /**
- * Used by `Listbox.Item`. In the hidden root, the item registers its value, disabled state and
- * how to read its label, and renders nothing, except a bare `<span>` with its text when labels are
- * being read and its text is nested in elements. Returns `undefined` outside the hidden root.
+ * Used by `Listbox.Item`. In the hidden root, registers the item's value, disabled state and how
+ * to read its label, and returns whether the item needs to render its text: only while labels are
+ * being read and its text is nested in elements. Returns `null` outside the hidden root.
  */
-export function useListboxHiddenItem(props: {
+export function useListboxHiddenItemRegistration(props: {
   label: string | undefined;
   disabled: boolean | undefined;
   value: any;
   children: React.ReactNode;
-}): { element: React.ReactElement | null } | undefined {
+}): { rendersText: boolean; textRef: React.RefObject<HTMLSpanElement | null> } | null {
   const { label, disabled = false, value = null, children } = props;
-  const registry = React.useContext(ListboxCollectionContext);
+  const registry = React.useContext(ListboxHiddenItemsContext);
   const readingText = React.useContext(ListboxHiddenTextContext);
   const index = React.useContext(ListboxItemIndexContext) ?? -1;
-  const textRef = React.useRef<HTMLSpanElement>(null);
+  const textRef = React.useRef<HTMLSpanElement | null>(null);
 
   const plainText = registry ? (label ?? getPlainText(children)) : null;
   const rendersText = registry != null && readingText && plainText == null;
@@ -128,10 +56,7 @@ export function useListboxHiddenItem(props: {
     };
   }, [registry, index, plainText, disabled, value, rendersText]);
 
-  if (!registry) {
-    return undefined;
-  }
-  return { element: rendersText ? <span ref={textRef}>{children}</span> : null };
+  return registry ? { rendersText, textRef } : null;
 }
 
 export interface ListboxHiddenBatch {
@@ -143,16 +68,16 @@ export interface ListboxHiddenBatch {
 export interface ListboxHiddenRootProps {
   /** Receives the function that sets which items render. */
   controllerRef: React.RefObject<((batch: ListboxHiddenBatch) => void) | null>;
-  registry: Map<number, ListboxHiddenItemEntry>;
-  /** Renders the item at an index with the latest render function. */
+  registry: Map<number, ListboxItemData>;
+  /** Renders the item at a position with the latest render function. */
   renderItem: (index: number) => React.ReactNode;
 }
 
 const EMPTY_BATCH: ListboxHiddenBatch = { indexes: [], text: false };
 
 /**
- * Renders the items whose data is being read, into a detached fragment. It only renders when
- * asked to, not when the list renders.
+ * Renders the items whose data is being read into a detached fragment. It only renders when the
+ * listbox asks it to, not when the list renders.
  */
 export const ListboxHiddenRoot = React.memo(function ListboxHiddenRoot(
   props: ListboxHiddenRootProps,
@@ -168,7 +93,7 @@ export const ListboxHiddenRoot = React.memo(function ListboxHiddenRoot(
   }, [controllerRef]);
 
   return (
-    <ListboxCollectionContext.Provider value={registry}>
+    <ListboxHiddenItemsContext.Provider value={registry}>
       <ListboxHiddenTextContext.Provider value={batch.text}>
         {batch.indexes.map((index) => (
           <ListboxItemIndexContext.Provider key={index} value={index}>
@@ -176,6 +101,6 @@ export const ListboxHiddenRoot = React.memo(function ListboxHiddenRoot(
           </ListboxItemIndexContext.Provider>
         ))}
       </ListboxHiddenTextContext.Provider>
-    </ListboxCollectionContext.Provider>
+    </ListboxHiddenItemsContext.Provider>
   );
 });

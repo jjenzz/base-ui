@@ -3,8 +3,8 @@ import { ReactStore, createSelector } from '@base-ui/utils/store';
 import { compareItemEquality } from '../internals/itemEquality';
 import type { ListboxRoot } from './root/ListboxRoot';
 import type { SelectionAction } from './utils/selectionReducer';
-import { createItemDataRef } from './list/ListboxHiddenItems';
-import type { ItemDataRef, ListboxHiddenItemEntry } from './list/ListboxHiddenItems';
+import { createItemDataRef } from './utils/itemData';
+import type { ItemDataRef, ListboxItemData } from './utils/itemData';
 
 export type State = {
   id: string | undefined;
@@ -61,7 +61,7 @@ export type Context = {
    */
   itemTemplates: Map<number, (item: any, index: number) => React.ReactNode>;
   /** How to read the label and disabled state of each rendered item, with `range`. */
-  renderedItems: Map<number, ListboxHiddenItemEntry>;
+  renderedItems: Map<number, ListboxItemData>;
   /**
    * Commits a selection action. With `range`, a range that reaches many items that aren't
    * rendered resolves over a few tasks, so it doesn't block the page.
@@ -107,7 +107,7 @@ export const selectors = {
   items: createSelector((state: State) => state.items),
   itemGroups: createSelector((state: State) => state.itemGroups),
   range: createSelector((state: State) => state.range),
-  hasCollection: createSelector((state: State) => state.range != null),
+  hasRange: createSelector((state: State) => state.range != null),
   activeItemRendered: createSelector((state: State) => state.activeItemRendered),
 
   orientation: createSelector((state: State) => state.orientation),

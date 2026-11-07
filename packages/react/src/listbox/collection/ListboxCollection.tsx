@@ -4,7 +4,7 @@ import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
 import { ListboxItemsContext, useListboxRootContext } from '../root/ListboxRootContext';
 import { useListboxGroupContext } from '../group/ListboxGroupContext';
-import { ListboxItemIndexContext, ListboxListGroupContext } from '../list/ListboxHiddenItems';
+import { ListboxItemIndexContext, ListboxListGroupContext } from './ListboxCollectionContext';
 
 /**
  * Renders the items: those of the enclosing `Listbox.Group` when it has `items`, otherwise every

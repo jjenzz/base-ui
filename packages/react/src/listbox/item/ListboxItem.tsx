@@ -20,7 +20,8 @@ import { findItemIndex } from '../../internals/itemEquality';
 import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
-import { ListboxItemIndexContext, useListboxHiddenItem } from '../list/ListboxHiddenItems';
+import { ListboxItemIndexContext } from '../collection/ListboxCollectionContext';
+import { useListboxHiddenItemRegistration } from '../list/ListboxHiddenItems';
 import type { SelectionAction } from '../utils/selectionReducer';
 
 function useListItemValueRegistration(params: {
@@ -56,10 +57,13 @@ export const ListboxItem = React.memo(
     componentProps: ListboxItem.Props,
     forwardedRef: React.ForwardedRef<HTMLElement>,
   ) {
-    // In the hidden root, the item only registers its data.
-    const hidden = useListboxHiddenItem(componentProps);
+    // In the hidden root, the item only registers its data. It renders its text only while labels
+    // are being read and the text is nested in elements, so the label can be read from the DOM.
+    const hidden = useListboxHiddenItemRegistration(componentProps);
     if (hidden) {
-      return hidden.element;
+      return hidden.rendersText ? (
+        <span ref={hidden.textRef}>{componentProps.children}</span>
+      ) : null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-use-before-define
@@ -87,7 +91,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
 
   const store = useListboxRootContext();
   const items = store.useState('items');
-  const hasCollection = store.useState('hasCollection');
+  const hasRange = store.useState('hasRange');
   const isItemEqualToValue = store.useState('isItemEqualToValue');
 
   // With `items`, `Listbox.List` renders each item and passes its position, since a virtualized
@@ -125,7 +129,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
   useListItemValueRegistration({
     index,
     itemValue,
-    hasRegistered: hasRegistered && !hasCollection,
+    hasRegistered: hasRegistered && !hasRange,
     valuesRef,
   });
 
@@ -136,7 +140,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
 
     // With `range`, the listbox reads a rendered item's data from here, and renders the items
     // that aren't rendered when it needs theirs.
-    if (hasCollection) {
+    if (hasRange) {
       const { renderedItems } = store.context;
       renderedItems.set(index, {
         getLabel: () => label ?? itemRef.current?.textContent ?? null,
@@ -157,7 +161,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
   }, [
     disabled,
     disabledItemsRef,
-    hasCollection,
+    hasRange,
     hasRegistered,
     index,
     itemValue,
@@ -282,7 +286,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
     lastKeyRef.current = event.key;
     // With `range`, the position comes from the list, and looking up the value would read the data
     // of every item.
-    const currentIndex = hasCollection
+    const currentIndex = hasRange
       ? index
       : findItemIndex(valuesRef.current, itemValue, isItemEqualToValue);
     const resolvedIndex = currentIndex === -1 ? index : currentIndex;
