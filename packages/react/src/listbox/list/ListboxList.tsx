@@ -30,9 +30,11 @@ import { ListboxCollection as ListboxCollectionPart } from '../collection/Listbo
 // How many items are read at a time when the data of items that aren't rendered is needed.
 const MIN_READ_BATCH = 100;
 const MAX_READ_BATCH = 2000;
-// Selections spanning more items than this resolve a chunk per task.
+// Selections spanning more items than this resolve over several tasks, each working for about
+// RANGE_SLICE_MS, reading RANGE_CHUNK_SIZE items at a time.
 const ASYNC_RANGE_THRESHOLD = 1000;
-const RANGE_CHUNK_SIZE = 500;
+const RANGE_CHUNK_SIZE = 250;
+const RANGE_SLICE_MS = 8;
 
 /** The first and last index a selection action reads, when it reads a range. */
 function getActionSpan(action: SelectionAction, count: number): [number, number] | null {
@@ -472,12 +474,12 @@ export const ListboxList = React.forwardRef(function ListboxList(
       // A new pointer press starts a new Shift+Arrow range from wherever focus lands.
       shiftAnchorRef.current = null;
       // eslint-disable-next-line @typescript-eslint/no-use-before-define
-      resolveTimeout.clear();
+      cancelResolve();
     },
     onKeyDownCapture(event: React.KeyboardEvent) {
       // A selection still being resolved is replaced by whatever this key does.
       // eslint-disable-next-line @typescript-eslint/no-use-before-define
-      resolveTimeout.clear();
+      cancelResolve();
       // Typeahead runs before the items' handlers, so a typed key doesn't reach the item it moved
       // focus away from, and Space continues a search in progress instead of selecting.
       if (event.key === ' ') {
@@ -735,10 +737,39 @@ export const ListboxList = React.forwardRef(function ListboxList(
 
   // A selection that spans many items resolves a chunk at a time, so it doesn't block the page,
   // and commits once. A new key or pointer press cancels it.
+  // Yields to the browser between slices with a message rather than a timer, since browsers delay
+  // nested timers by at least 4 ms. Each resolve gets a token, and a newer one cancels it.
+  const resolveTokenRef = React.useRef(0);
+  const channelRef = React.useRef<MessageChannel | null>(null);
   const resolveTimeout = useTimeout();
+  const cancelResolve = useStableCallback(() => {
+    resolveTokenRef.current += 1;
+    resolveTimeout.clear();
+  });
+  const yieldToBrowser = useStableCallback((callback: () => void) => {
+    if (typeof MessageChannel === 'undefined') {
+      resolveTimeout.start(0, callback);
+      return;
+    }
+    if (!channelRef.current) {
+      channelRef.current = new MessageChannel();
+    }
+    const channel = channelRef.current;
+    channel.port1.onmessage = () => callback();
+    channel.port2.postMessage(null);
+  });
+  React.useEffect(
+    () => () => {
+      resolveTokenRef.current += 1;
+      channelRef.current?.port1.close();
+      channelRef.current = null;
+    },
+    [],
+  );
+
   const commitSelection = useStableCallback(
     (action: SelectionAction, eventDetails: ListboxRoot.ChangeEventDetails) => {
-      resolveTimeout.clear();
+      cancelResolve();
       const commit = (values: any[], disabled: Array<boolean | undefined>) => {
         setValue(
           selectionReducer(
@@ -761,18 +792,25 @@ export const ListboxList = React.forwardRef(function ListboxList(
 
       const values: any[] = new Array(count);
       const disabled: boolean[] = new Array(count);
+      const token = resolveTokenRef.current;
       let next = span[0];
-      const resolveChunk = () => {
-        const end = Math.min(span[1] + 1, next + RANGE_CHUNK_SIZE);
-        readRange(next, end, values, disabled);
-        next = end;
+      const resolveSlice = () => {
+        if (token !== resolveTokenRef.current) {
+          return;
+        }
+        const sliceStart = performance.now();
+        while (next <= span[1] && performance.now() - sliceStart < RANGE_SLICE_MS) {
+          const end = Math.min(span[1] + 1, next + RANGE_CHUNK_SIZE);
+          readRange(next, end, values, disabled);
+          next = end;
+        }
         if (next > span[1]) {
           commit(values, disabled);
         } else {
-          resolveTimeout.start(0, resolveChunk);
+          yieldToBrowser(resolveSlice);
         }
       };
-      resolveTimeout.start(0, resolveChunk);
+      yieldToBrowser(resolveSlice);
     },
   );
   store.useContextCallback('commitSelection', commitSelection);
@@ -822,10 +860,12 @@ export const ListboxList = React.forwardRef(function ListboxList(
     });
   }, [hasCollection, readItem, store]);
 
-  // Any render can change what the render functions return, so reads start fresh.
+  // Any render can change what the render functions return, so reads start fresh. Labels read
+  // during a typing session are kept until it ends: typing moves the highlight, which usually
+  // scrolls and renders the list, and the search is for what the user saw when they started typing.
   useIsoLayoutEffect(() => {
     readCacheRef.current = {
-      labels: [],
+      labels: typingRef.current ? readCacheRef.current.labels : [],
       disabled: [],
       values: [],
       batchStart: -1,

@@ -87,13 +87,6 @@ export const ListboxCollectionContext = React.createContext<Map<
 /** Whether the hidden root is reading labels, so items whose text is nested need to render it. */
 const ListboxHiddenTextContext = React.createContext(false);
 
-export interface ListboxCollectionItemProps {
-  label: string | undefined;
-  disabled: boolean;
-  value: any;
-  children: React.ReactNode;
-}
-
 function getPlainText(children: React.ReactNode): string | null {
   if (typeof children === 'string' || typeof children === 'number') {
     return String(children);
@@ -102,21 +95,24 @@ function getPlainText(children: React.ReactNode): string | null {
 }
 
 /**
- * An item in the hidden root. It registers its value, disabled state and how to read its label.
- * It renders nothing, except a bare `<span>` with its text when labels are being read and its
- * text is nested in elements, so the text can be read from the DOM.
+ * Used by `Listbox.Item`. In the hidden root, the item registers its value, disabled state and
+ * how to read its label, and renders nothing, except a bare `<span>` with its text when labels are
+ * being read and its text is nested in elements. Returns `undefined` outside the hidden root.
  */
-export const ListboxCollectionItem = React.memo(function ListboxCollectionItem(
-  props: ListboxCollectionItemProps,
-) {
-  const { label, disabled, value, children } = props;
+export function useListboxHiddenItem(props: {
+  label: string | undefined;
+  disabled: boolean | undefined;
+  value: any;
+  children: React.ReactNode;
+}): { element: React.ReactElement | null } | undefined {
+  const { label, disabled = false, value = null, children } = props;
   const registry = React.useContext(ListboxCollectionContext);
   const readingText = React.useContext(ListboxHiddenTextContext);
   const index = React.useContext(ListboxItemIndexContext) ?? -1;
   const textRef = React.useRef<HTMLSpanElement>(null);
 
-  const plainText = label ?? getPlainText(children);
-  const rendersText = readingText && plainText == null;
+  const plainText = registry ? (label ?? getPlainText(children)) : null;
+  const rendersText = registry != null && readingText && plainText == null;
 
   useIsoLayoutEffect(() => {
     if (!registry || index === -1) {
@@ -132,8 +128,11 @@ export const ListboxCollectionItem = React.memo(function ListboxCollectionItem(
     };
   }, [registry, index, plainText, disabled, value, rendersText]);
 
-  return rendersText ? <span ref={textRef}>{children}</span> : null;
-});
+  if (!registry) {
+    return undefined;
+  }
+  return { element: rendersText ? <span ref={textRef}>{children}</span> : null };
+}
 
 export interface ListboxHiddenBatch {
   indexes: number[];

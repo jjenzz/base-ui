@@ -20,11 +20,7 @@ import { findItemIndex } from '../../internals/itemEquality';
 import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
-import {
-  ListboxCollectionContext,
-  ListboxCollectionItem,
-  ListboxItemIndexContext,
-} from '../list/ListboxHiddenItems';
+import { ListboxItemIndexContext, useListboxHiddenItem } from '../list/ListboxHiddenItems';
 import type { SelectionAction } from '../utils/selectionReducer';
 
 function useListItemValueRegistration(params: {
@@ -60,14 +56,10 @@ export const ListboxItem = React.memo(
     componentProps: ListboxItem.Props,
     forwardedRef: React.ForwardedRef<HTMLElement>,
   ) {
-    // In the hidden copy of every item, the item only records its label and disabled state.
-    if (React.useContext(ListboxCollectionContext)) {
-      const { label, disabled = false, value = null, children } = componentProps;
-      return (
-        <ListboxCollectionItem label={label} disabled={disabled} value={value}>
-          {children}
-        </ListboxCollectionItem>
-      );
+    // In the hidden root, the item only registers its data.
+    const hidden = useListboxHiddenItem(componentProps);
+    if (hidden) {
+      return hidden.element;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-use-before-define
