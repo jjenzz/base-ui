@@ -6,6 +6,8 @@ import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
 import { ownerDocument } from '@base-ui/utils/owner';
 import { useRefWithInit } from '@base-ui/utils/useRefWithInit';
+import { warn } from '@base-ui/utils/warn';
+import { SafeReact } from '@base-ui/utils/safeReact';
 import type { BaseUIComponentProps, HTMLProps } from '../../internals/types';
 import { useRenderElement } from '../../internals/useRenderElement';
 import { useDirection } from '../../internals/direction-context';
@@ -54,6 +56,18 @@ export const ListboxList = React.forwardRef(function ListboxList(
   const optInMode = multiple === 'opt-in';
   const direction = useDirection();
   const { lastSelectedIndexRef, typingRef } = store.context;
+
+  const childrenIsFunction = typeof children === 'function';
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || !items || childrenIsFunction) {
+      return;
+    }
+    warn(
+      '<Listbox.List> needs a function as its children when `items` is passed to <Listbox.Root>. ' +
+        'Render each item with `{(item, index) => <Listbox.Item …>}`, or remove `items`.',
+      SafeReact.captureOwnerStack?.() || '',
+    );
+  }, [items, childrenIsFunction]);
 
   // Each group's position and the position of its first item in the whole list.
   const groupInfos = React.useMemo(() => {

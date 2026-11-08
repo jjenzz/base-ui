@@ -28,7 +28,6 @@ export interface ListboxConfigContext {
   multiple: boolean | 'opt-in';
   orientation: 'vertical' | 'horizontal';
   highlightItemOnHover: boolean;
-  isItemEqualToValue: (itemValue: any, value: any) => boolean;
   /** Every item, flattened when grouped. */
   items: readonly any[] | undefined;
   /** Whether only some of the items render, so the rest are read through the collection. */

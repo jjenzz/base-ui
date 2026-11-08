@@ -2691,6 +2691,83 @@ describe('<Listbox.Root />', () => {
     });
   });
 
+  describe('prop: items without a render function', () => {
+    const FRUITS = ['apple', 'banana'];
+
+    it('warns when the list renders its children directly', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await render(
+        <Listbox.Root items={FRUITS}>
+          <Listbox.List aria-label="Fruits">
+            {FRUITS.map((fruit) => (
+              <Listbox.Item key={fruit} value={fruit}>
+                {fruit}
+              </Listbox.Item>
+            ))}
+          </Listbox.List>
+        </Listbox.Root>,
+      );
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]?.[0]).toContain(
+        'Base UI: <Listbox.List> needs a function as its children when `items` is passed',
+      );
+    });
+
+    it('does not warn when the list renders items with a function', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await render(
+        <Listbox.Root items={FRUITS}>
+          <Listbox.List aria-label="Fruits">
+            {(fruit: string) => <Listbox.Item value={fruit}>{fruit}</Listbox.Item>}
+          </Listbox.List>
+        </Listbox.Root>,
+      );
+
+      expect(warnSpy).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('prop: isItemEqualToValue', () => {
+    it('does not render items again when a new comparator gives the same results', async () => {
+      const fruits = [{ id: 'apple' }, { id: 'banana' }];
+      let itemDrawCount = 0;
+      // Stable, so an item only calls it when it renders again.
+      const renderItem = (props: React.HTMLAttributes<HTMLDivElement>) => {
+        itemDrawCount += 1;
+        return <div {...props} />;
+      };
+
+      function Fruits() {
+        const [count, setCount] = React.useState(0);
+        return (
+          <React.Fragment>
+            <button onClick={() => setCount(count + 1)}>Render again</button>
+            <Listbox.Root
+              items={fruits}
+              // A new comparator on every render.
+              isItemEqualToValue={(item, value) => item.id === value.id}
+            >
+              <Listbox.List aria-label="Fruits">
+                {(fruit: (typeof fruits)[number]) => (
+                  <Listbox.Item value={fruit} render={renderItem}>
+                    {fruit.id}
+                  </Listbox.Item>
+                )}
+              </Listbox.List>
+            </Listbox.Root>
+          </React.Fragment>
+        );
+      }
+
+      const { user } = await render(<Fruits />);
+      const countBefore = itemDrawCount;
+      await user.click(screen.getByRole('button', { name: 'Render again' }));
+
+      expect(itemDrawCount).toBe(countBefore);
+    });
+  });
+
   describe('prop: range', () => {
     const { render: renderFakeTimers, clock } = createRenderer();
 
@@ -3014,11 +3091,16 @@ describe('<Listbox.Root />', () => {
         estimateSize: () => 20,
       });
 
+      const virtualItems = virtualizer.getVirtualItems();
+      const starts = new Map(
+        virtualItems.map((virtualItem) => [virtualItem.index, virtualItem.start]),
+      );
+
       return (
         <Listbox.Root
           multiple
           items={rows}
-          itemToStringLabel={(row) => row.name}
+          range={{ start: virtualItems[0]?.index ?? 0, end: virtualItems.at(-1)?.index ?? -1 }}
           onValueChange={props.onValueChange}
           onItemHighlighted={(_, eventDetails) => {
             if (eventDetails.reason !== 'pointer' && eventDetails.index !== -1) {
@@ -3026,23 +3108,30 @@ describe('<Listbox.Root />', () => {
             }
           }}
         >
-          <Listbox.List ref={listRef} style={{ height: 100, overflow: 'auto' }}>
-            <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-              {virtualizer.getVirtualItems().map((virtualItem) => (
-                <Listbox.Item
-                  key={virtualItem.key}
-                  value={rows[virtualItem.index]}
-                  style={{
-                    position: 'absolute',
-                    top: virtualItem.start,
-                    height: 20,
-                    width: '100%',
-                  }}
-                >
-                  {rows[virtualItem.index].name}
-                </Listbox.Item>
-              ))}
-            </div>
+          <Listbox.List
+            ref={listRef}
+            style={{ height: 100, overflow: 'auto', position: 'relative' }}
+            // A spacer gives the list the scroll height of every row.
+            render={(listProps) => (
+              <div {...listProps}>
+                {listProps.children}
+                <div aria-hidden style={{ height: virtualizer.getTotalSize() }} />
+              </div>
+            )}
+          >
+            {(row: Row, index: number) => (
+              <Listbox.Item
+                value={row}
+                style={{
+                  position: 'absolute',
+                  top: starts.get(index) ?? 0,
+                  height: 20,
+                  width: '100%',
+                }}
+              >
+                {row.name}
+              </Listbox.Item>
+            )}
           </Listbox.List>
         </Listbox.Root>
       );

@@ -168,20 +168,10 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
       multiple: multipleProp,
       orientation,
       highlightItemOnHover,
-      isItemEqualToValue,
       items,
       hasRange,
     }),
-    [
-      generatedId,
-      disabled,
-      multipleProp,
-      orientation,
-      highlightItemOnHover,
-      isItemEqualToValue,
-      items,
-      hasRange,
-    ],
+    [generatedId, disabled, multipleProp, orientation, highlightItemOnHover, items, hasRange],
   );
 
   return (

@@ -16,7 +16,7 @@ import { activeElement, contains } from '../../floating-ui-react/utils';
 import { createChangeEventDetails } from '../../internals/createBaseUIEventDetails';
 import { REASONS } from '../../internals/reasons';
 import { useCompositeListItem } from '../../internals/composite';
-import { compareItemEquality, findItemIndex } from '../../internals/itemEquality';
+import { compareItemEquality } from '../../internals/itemEquality';
 import { useListboxConfigContext, useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
@@ -103,28 +103,20 @@ const ListboxItemView = React.memo(function ListboxItemView(
 
   const store = useListboxRootContext();
   const {
-    items,
     hasRange,
-    isItemEqualToValue,
     multiple,
     highlightItemOnHover,
     disabled: rootDisabled,
   } = useListboxConfigContext();
 
-  // With `items`, `Listbox.List` renders each item and passes its position, since a virtualized
-  // list renders only some of the items and their order in the DOM doesn't match their position.
+  // With `items`, the List's render function renders each item and passes its position, since a
+  // virtualized list renders only some of the items, and their order in the DOM doesn't match it.
+  // Otherwise, `CompositeList` works the position out from the DOM.
   const indexFromList = React.useContext(CollectionItemIndexContext);
-  const indexFromItems = React.useMemo(
-    () =>
-      indexFromList === undefined && items
-        ? findItemIndex(items, itemValue, isItemEqualToValue)
-        : undefined,
-    [indexFromList, items, itemValue, isItemEqualToValue],
-  );
 
   const listItem = useCompositeListItem({
     guess: true,
-    index: indexFromList ?? indexFromItems,
+    index: indexFromList,
   });
   useCollectionItem(collectionData, listItem.index);
 
@@ -262,7 +254,13 @@ const ListboxItemView = React.memo(function ListboxItemView(
       const { itemReader } = store.context;
       const count = itemReader.count();
       for (let position = 0; position < count; position += 1) {
-        if (compareItemEquality(itemReader.getValue(position), itemValue, isItemEqualToValue)) {
+        if (
+          compareItemEquality(
+            itemReader.getValue(position),
+            itemValue,
+            store.state.isItemEqualToValue,
+          )
+        ) {
           currentIndex = position;
           break;
         }
