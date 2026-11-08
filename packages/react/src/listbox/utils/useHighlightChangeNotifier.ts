@@ -53,11 +53,11 @@ export function useHighlightChangeNotifier<Value>(params: {
         if (previous?.index === highlightedIndex) {
           return previous;
         }
+        // The first resolve only records where the highlight starts, from an effect, where
+        // nothing can render. With `range`, changes are told apart by position, so it needs no
+        // value.
         if (previous == null) {
-          return {
-            index: highlightedIndex,
-            value: store.context.itemReader.peekValue(highlightedIndex),
-          };
+          return { index: highlightedIndex, value: undefined };
         }
       }
 

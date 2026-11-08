@@ -18,7 +18,10 @@ const SPAN_CHUNK_SIZE = 250;
 const READ_AHEAD_DISTANCE = 2000;
 
 export interface CollectionOptions<Item> {
-  /** Every item, including those that aren't rendered. */
+  /**
+   * Every item, including those that aren't rendered. Without them, the collection only knows the
+   * rendered items.
+   */
   items: readonly Item[] | undefined;
   /** Renders one item, as the consumer would. Called for items that aren't rendered. */
   render: (item: Item, index: number) => React.ReactNode;
@@ -32,14 +35,14 @@ export interface CollectionReadOptions {
 }
 
 export interface Collection<Data> {
+  /** How many items there are: every item with `items`, otherwise the rendered ones. */
+  count: () => number;
   /**
    * The data an item registered with `useCollectionItem`. A rendered item's is read directly;
    * otherwise a batch of items from `index` renders into the hidden fragment. Only call it from
    * event handlers, since it renders synchronously.
    */
   get: (index: number, options?: CollectionReadOptions) => Data | undefined;
-  /** The data an item registered, if it's rendered or already read. Never renders. */
-  peek: (index: number) => Data | undefined;
   /**
    * Reads the items from `start` to `end`, inclusive, in slices that yield to the browser between
    * them, then calls `onDone` with their data. Returns a function that cancels it.
@@ -115,7 +118,6 @@ export function useCollection<Item, Data>(
     renderRef.current = render;
     enabledRef.current = enabled;
   });
-  const count = () => itemsRef.current?.length ?? 0;
 
   const internals = useRefWithInit((): CollectionInternals<Data> => ({
     fragment: typeof document === 'undefined' ? null : document.createDocumentFragment(),
@@ -123,6 +125,17 @@ export function useCollection<Item, Data>(
     hiddenRegistry: new Map(),
     controllerRef: { current: null },
   })).current;
+
+  const count = useStableCallback(() => {
+    if (itemsRef.current) {
+      return itemsRef.current.length;
+    }
+    let last = -1;
+    internals.rendered.forEach((_, index) => {
+      last = Math.max(last, index);
+    });
+    return last + 1;
+  });
 
   const cacheRef = React.useRef(createCache<Data>());
   const heldRef = React.useRef(false);
@@ -160,14 +173,9 @@ export function useCollection<Item, Data>(
     cacheRef.current.items[index] = { data, text };
   };
 
-  const peek = useStableCallback((index: number) => {
-    const rendered = internals.rendered.get(index);
-    return rendered !== undefined ? rendered : cacheRef.current.items[index]?.data;
-  });
-
   const get = useStableCallback((index: number, readOptions?: CollectionReadOptions) => {
     const rendered = internals.rendered.get(index);
-    if (rendered !== undefined) {
+    if (rendered !== undefined || !enabledRef.current) {
       return rendered;
     }
     const text = readOptions?.text ?? false;
@@ -292,8 +300,8 @@ export function useCollection<Item, Data>(
   });
 
   const methods = useRefWithInit(() => ({
+    count,
     get,
-    peek,
     readSpan,
     readAhead: { start: startReadAhead, stop: stopReadAhead },
     hold,

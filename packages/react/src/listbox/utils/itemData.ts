@@ -14,6 +14,4 @@ export interface ListboxItemReader {
   getLabel: (index: number) => string | null;
   getValue: (index: number) => any;
   isDisabled: (index: number) => boolean;
-  /** The value, if it's known without rendering anything. Safe to call outside event handlers. */
-  peekValue: (index: number) => any;
 }

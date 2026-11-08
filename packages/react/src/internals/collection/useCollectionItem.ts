@@ -8,7 +8,7 @@ import {
 } from './CollectionContext';
 
 export interface CollectionItem {
-  /** The item's position in the whole collection, or `-1` outside one. */
+  /** The position the item registered at, or `-1` when it didn't register. */
   index: number;
   /** Whether the item is rendering into the hidden fragment, only so its data can be read. */
   hidden: boolean;
@@ -17,37 +17,44 @@ export interface CollectionItem {
 }
 
 /**
- * Registers an item's data with its collection, at the position `CollectionItemIndex` gives it.
- * `data` is whatever the item's component wants the collection to know, such as its value and
- * how to read its label. Registering writes to a map; it never renders anything.
+ * Registers an item's data with its collection. `data` is whatever the item's component wants the
+ * collection to know, such as its value and how to read its label. Registering writes to a map
+ * keyed by position; it never renders anything.
+ *
+ * - In the hidden fragment, the collection gives the item its position, and `index` is ignored.
+ * - When rendered, the item registers at `index`, the position its list gave it. Without `index`,
+ *   a rendered item doesn't register, so a component can call this once to learn whether it's
+ *   hidden, and again where it knows its position.
  */
-export function useCollectionItem<Data>(data: Data): CollectionItem {
-  const index = React.useContext(CollectionItemIndexContext) ?? -1;
+export function useCollectionItem<Data>(data: Data, index?: number): CollectionItem {
+  const indexFromCollection = React.useContext(CollectionItemIndexContext);
   const hiddenContext = React.useContext(CollectionHiddenContext);
   const collection = React.useContext(CollectionContext);
 
-  // Hidden items register for the read in progress; rendered ones with the collection.
+  let position = -1;
   let registry: Map<number, Data> | null = null;
   if (hiddenContext) {
+    position = indexFromCollection ?? -1;
     registry = hiddenContext.registry;
-  } else if (collection?.enabled) {
+  } else if (index !== undefined && collection) {
+    position = index;
     registry = collection.rendered;
   }
 
   useIsoLayoutEffect(() => {
-    if (!registry || index === -1) {
+    if (!registry || position === -1) {
       return undefined;
     }
-    registry.set(index, data);
+    registry.set(position, data);
     return () => {
       // A later item may have registered at this position in the same commit.
-      if (registry.get(index) === data) {
-        registry.delete(index);
+      if (registry.get(position) === data) {
+        registry.delete(position);
       }
     };
-  }, [registry, index, data]);
+  }, [registry, position, data]);
 
-  return { index, hidden: hiddenContext != null, text: hiddenContext?.text ?? false };
+  return { index: position, hidden: hiddenContext != null, text: hiddenContext?.text ?? false };
 }
 
 /** Whether the component is rendering inside the hidden fragment. */

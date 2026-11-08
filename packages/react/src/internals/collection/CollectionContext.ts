@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 
-/** Where rendered items register, and whether they should. */
+/** Where rendered items register, and whether items that aren't rendered can be read. */
 export const CollectionContext = React.createContext<{
   rendered: Map<number, any>;
   enabled: boolean;

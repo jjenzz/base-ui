@@ -53,7 +53,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
   const activeItemRendered = store.useState('activeItemRendered');
   const optInMode = multiple === 'opt-in';
   const direction = useDirection();
-  const { disabledItemsRef, labelsRef, lastSelectedIndexRef, typingRef, valuesRef } = store.context;
+  const { lastSelectedIndexRef, typingRef } = store.context;
 
   // Each group's position and the position of its first item in the whole list.
   const groupInfos = React.useMemo(() => {
@@ -97,23 +97,13 @@ export const ListboxList = React.forwardRef(function ListboxList(
     enabled: range != null,
   });
 
-  // Every part reads item data through this: from the rendered items' registrations without
-  // `range`, and through the collection with it.
+  // Every part reads item data through the collection: rendered items from what they registered,
+  // and, with `range`, the rest by rendering them into the hidden fragment.
   const itemReader = useRefWithInit((): ListboxItemReader => ({
-    count: () =>
-      store.state.range != null ? (store.state.items?.length ?? 0) : valuesRef.current.length,
-    getLabel: (index) =>
-      store.state.range != null
-        ? (collection.get(index, { text: true })?.getLabel() ?? null)
-        : (labelsRef.current[index] ?? null),
-    getValue: (index) =>
-      store.state.range != null ? collection.get(index)?.value : valuesRef.current[index],
-    isDisabled: (index) =>
-      store.state.range != null
-        ? (collection.get(index)?.disabled ?? false)
-        : Boolean(disabledItemsRef.current[index]),
-    peekValue: (index) =>
-      store.state.range != null ? collection.peek(index)?.value : valuesRef.current[index],
+    count: collection.count,
+    getLabel: (index) => collection.get(index, { text: true })?.getLabel() ?? null,
+    getValue: (index) => collection.get(index)?.value,
+    isDisabled: (index) => collection.get(index)?.disabled ?? false,
   })).current;
   useIsoLayoutEffect(() => {
     store.context.itemReader = itemReader;
@@ -311,10 +301,9 @@ export const ListboxList = React.forwardRef(function ListboxList(
   // Typeahead, like Select and Menu: keys typed in quick succession build one search, which resets
   // after a pause, and typing the same letter again cycles through the items that start with it.
   const typeahead = useTypeahead({
-    // With `range`, labels are read one at a time, so a match near the highlight reads only a few.
-    listRef: range != null ? undefined : labelsRef,
-    getLabel: range != null ? itemReader.getLabel : undefined,
-    getCount: range != null ? itemReader.count : undefined,
+    // Labels are read one at a time, so a match near the highlight reads only a few.
+    getLabel: itemReader.getLabel,
+    getCount: itemReader.count,
     elementsRef: composite.elementsRef,
     activeIndex,
     enabled: !disabled,
@@ -652,12 +641,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
   // and item registration share the same ref.
   return (
     <CollectionProvider collection={collection}>
-      <CompositeList
-        elementsRef={composite.elementsRef}
-        // With `range`, the labels come from every item instead of the rendered ones.
-        labelsRef={range != null ? undefined : labelsRef}
-        onMapChange={onMapChange}
-      >
+      <CompositeList elementsRef={composite.elementsRef} onMapChange={onMapChange}>
         {element}
       </CompositeList>
     </CollectionProvider>

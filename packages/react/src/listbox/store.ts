@@ -42,11 +42,7 @@ export type State = {
 };
 
 export type Context = {
-  /** The rendered items' values, labels and disabled states, by position, without `range`. */
-  valuesRef: React.RefObject<Array<any>>;
-  labelsRef: React.RefObject<Array<string | null>>;
-  disabledItemsRef: React.RefObject<Array<boolean | undefined>>;
-  /** Reads any item's data by position, with or without `range`. Set by `Listbox.List`. */
+  /** Reads any item's data by position, through the collection. Set by `Listbox.List`. */
   itemReader: ListboxItemReader;
   typingRef: React.RefObject<boolean>;
   lastSelectedIndexRef: React.RefObject<number | null>;
@@ -199,15 +195,11 @@ function createInitialState(): State {
 
 function createInitialContext(): Context {
   return {
-    valuesRef: { current: [] },
-    labelsRef: { current: [] },
-    disabledItemsRef: { current: [] },
     itemReader: {
       count: () => 0,
       getLabel: () => null,
       getValue: () => undefined,
       isDisabled: () => false,
-      peekValue: () => undefined,
     },
     typingRef: { current: false },
     lastSelectedIndexRef: { current: null },

@@ -16,35 +16,13 @@ import { activeElement, contains } from '../../floating-ui-react/utils';
 import { createChangeEventDetails } from '../../internals/createBaseUIEventDetails';
 import { REASONS } from '../../internals/reasons';
 import { useCompositeListItem } from '../../internals/composite';
-import { findItemIndex } from '../../internals/itemEquality';
+import { compareItemEquality, findItemIndex } from '../../internals/itemEquality';
 import { useListboxConfigContext, useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
 import { CollectionItemIndexContext, useCollectionItem } from '../../internals/collection';
 import type { ListboxItemData } from '../utils/itemData';
 import type { SelectionAction } from '../utils/selectionReducer';
-
-function useListItemValueRegistration(params: {
-  index: number;
-  itemValue: any;
-  hasRegistered: boolean;
-  valuesRef: React.RefObject<Array<any>>;
-}) {
-  const { index, itemValue, hasRegistered, valuesRef } = params;
-
-  useIsoLayoutEffect(() => {
-    if (!hasRegistered) {
-      return undefined;
-    }
-
-    const values = valuesRef.current;
-    values[index] = itemValue;
-
-    return () => {
-      delete values[index];
-    };
-  }, [hasRegistered, index, itemValue, valuesRef]);
-}
 
 /**
  * An individual option in the listbox.
@@ -79,6 +57,8 @@ export const ListboxItem = React.memo(
       }),
       [value, rootDisabled, disabled, plainLabel],
     );
+    // Only registers here in the hidden fragment, where the collection gives the position. A
+    // rendered item registers in its view, where its list gives it its position.
     const item = useCollectionItem(data);
 
     // In the hidden fragment, the item only registers its data. It renders its text only while
@@ -93,6 +73,7 @@ export const ListboxItem = React.memo(
         {...componentProps}
         forwardedRef={forwardedRef}
         textElementRef={setTextElement}
+        collectionData={data}
       />
     );
   }),
@@ -105,9 +86,10 @@ const ListboxItemView = React.memo(function ListboxItemView(
   viewProps: ListboxItem.Props & {
     forwardedRef: React.ForwardedRef<HTMLElement>;
     textElementRef: React.RefCallback<HTMLElement>;
+    collectionData: ListboxItemData;
   },
 ) {
-  const { forwardedRef, textElementRef, ...componentProps } = viewProps;
+  const { forwardedRef, textElementRef, collectionData, ...componentProps } = viewProps;
   const {
     render,
     className,
@@ -142,46 +124,21 @@ const ListboxItemView = React.memo(function ListboxItemView(
 
   const listItem = useCompositeListItem({
     guess: true,
-    label,
     index: indexFromList ?? indexFromItems,
   });
+  useCollectionItem(collectionData, listItem.index);
 
   const optInMode = multiple === 'opt-in';
   const active = store.useState('isActive', listItem.index);
   const highlighted = store.useState('isHighlighted', listItem.index);
   const selected = store.useState('isSelected', listItem.index, itemValue);
-  const { disabledItemsRef, lastSelectedIndexRef, valuesRef } = store.context;
+  const { lastSelectedIndexRef } = store.context;
 
   const index = listItem.index;
   const hasRegistered = index !== -1;
 
   const itemRef = React.useRef<HTMLDivElement | null>(null);
   const indexRef = useValueAsRef(index);
-  // With `items`, the root already knows every value.
-  useListItemValueRegistration({
-    index,
-    itemValue,
-    hasRegistered: hasRegistered && !hasRange,
-    valuesRef,
-  });
-
-  useIsoLayoutEffect(() => {
-    if (!hasRegistered) {
-      return undefined;
-    }
-
-    // With `range`, the item registers its data with the collection instead.
-    if (hasRange) {
-      return undefined;
-    }
-
-    const disabledItems = disabledItemsRef.current;
-    disabledItems[index] = rootDisabled || disabled;
-
-    return () => {
-      delete disabledItems[index];
-    };
-  }, [disabled, disabledItemsRef, hasRange, hasRegistered, index, rootDisabled]);
 
   // In a virtualized list, the list tracks whether the item holding the tab stop is rendered,
   // and takes its place in the tab order while it isn't.
@@ -297,11 +254,20 @@ const ListboxItemView = React.memo(function ListboxItemView(
 
   function handleItemKeyDown(event: BaseUIEvent<React.KeyboardEvent>) {
     lastKeyRef.current = event.key;
-    // With `range`, the position comes from the list, and looking up the value would read the data
-    // of every item.
-    const currentIndex = hasRange
-      ? index
-      : findItemIndex(valuesRef.current, itemValue, isItemEqualToValue);
+    // Items can move before they render again, such as when reordering them, so the item's current
+    // position is looked up by its value. With `range`, the position comes from the list, and
+    // looking up the value would read the data of every item.
+    let currentIndex = -1;
+    if (!hasRange) {
+      const { itemReader } = store.context;
+      const count = itemReader.count();
+      for (let position = 0; position < count; position += 1) {
+        if (compareItemEquality(itemReader.getValue(position), itemValue, isItemEqualToValue)) {
+          currentIndex = position;
+          break;
+        }
+      }
+    }
     const resolvedIndex = currentIndex === -1 ? index : currentIndex;
 
     store.highlightItem(resolvedIndex, event.nativeEvent);
