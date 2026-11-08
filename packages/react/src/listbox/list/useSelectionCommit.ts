@@ -74,7 +74,7 @@ export function useSelectionCommit(params: {
             {
               count,
               getValue: (index) => data[index]?.value,
-              isDisabled: (index) => store.state.disabled || (data[index]?.disabled ?? false),
+              isDisabled: (index) => data[index]?.disabled ?? false,
             },
             store.state.isItemEqualToValue,
           ),

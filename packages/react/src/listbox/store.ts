@@ -107,7 +107,6 @@ export const selectors = {
   items: createSelector((state: State) => state.items),
   itemGroups: createSelector((state: State) => state.itemGroups),
   range: createSelector((state: State) => state.range),
-  hasRange: createSelector((state: State) => state.range != null),
   activeItemRendered: createSelector((state: State) => state.activeItemRendered),
 
   orientation: createSelector((state: State) => state.orientation),

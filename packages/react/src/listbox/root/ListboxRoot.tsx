@@ -13,7 +13,11 @@ import type {
 import type { REASONS } from '../../internals/reasons';
 import { useBaseUiId } from '../../internals/useBaseUiId';
 import { defaultItemEquality } from '../../internals/itemEquality';
-import { ListboxItemsContext, ListboxRootContext } from './ListboxRootContext';
+import {
+  ListboxConfigContext,
+  ListboxItemsContext,
+  ListboxRootContext,
+} from './ListboxRootContext';
 import { ListboxStore } from '../store';
 import { flattenLeafItems, isGroupedItems } from '../../internals/resolveValueLabel';
 import { useHighlightChangeNotifier } from '../utils/useHighlightChangeNotifier';
@@ -162,9 +166,35 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     [items, itemGroups, range],
   );
 
+  const hasRange = range != null;
+  const config = React.useMemo<ListboxConfigContext>(
+    () => ({
+      id: generatedId,
+      disabled,
+      multiple: multipleProp,
+      orientation,
+      highlightItemOnHover,
+      isItemEqualToValue,
+      items,
+      hasRange,
+    }),
+    [
+      generatedId,
+      disabled,
+      multipleProp,
+      orientation,
+      highlightItemOnHover,
+      isItemEqualToValue,
+      items,
+      hasRange,
+    ],
+  );
+
   return (
     <ListboxRootContext.Provider value={store}>
-      <ListboxItemsContext.Provider value={itemsContext}>{children}</ListboxItemsContext.Provider>
+      <ListboxConfigContext.Provider value={config}>
+        <ListboxItemsContext.Provider value={itemsContext}>{children}</ListboxItemsContext.Provider>
+      </ListboxConfigContext.Provider>
     </ListboxRootContext.Provider>
   );
 }

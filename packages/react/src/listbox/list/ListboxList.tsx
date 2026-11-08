@@ -17,7 +17,11 @@ import { useCompositeRoot, CompositeList } from '../../internals/composite';
 import { activeElement, contains } from '../../floating-ui-react/utils';
 import { stopEvent } from '../../floating-ui-react/utils/event';
 import { useTypeahead } from '../../floating-ui-react';
-import { ListboxItemsContext, useListboxRootContext } from '../root/ListboxRootContext';
+import {
+  ListboxItemsContext,
+  useListboxConfigContext,
+  useListboxRootContext,
+} from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import type { SelectionAction } from '../utils/selectionReducer';
 import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
@@ -40,12 +44,9 @@ export const ListboxList = React.forwardRef(function ListboxList(
 
   const store = useListboxRootContext();
 
-  const id = store.useState('id');
+  const { id, orientation, disabled, multiple } = useListboxConfigContext();
   const labelId = store.useState('labelId');
   const activeIndex = store.useState('activeIndex');
-  const orientation = store.useState('orientation');
-  const disabled = store.useState('disabled');
-  const multiple = store.useState('multiple');
   const { items, itemGroups, range } = React.useContext(ListboxItemsContext);
   // With `items`, the list knows every item, including those that aren't rendered.
   const itemCount = items?.length;
@@ -109,7 +110,7 @@ export const ListboxList = React.forwardRef(function ListboxList(
       store.state.range != null ? collection.get(index)?.value : valuesRef.current[index],
     isDisabled: (index) =>
       store.state.range != null
-        ? store.state.disabled || (collection.get(index)?.disabled ?? false)
+        ? (collection.get(index)?.disabled ?? false)
         : Boolean(disabledItemsRef.current[index]),
     peekValue: (index) =>
       store.state.range != null ? collection.peek(index)?.value : valuesRef.current[index],

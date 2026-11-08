@@ -22,6 +22,36 @@ export const ListboxItemsContext = React.createContext<ListboxItemsContext>({
   range: undefined,
 });
 
+export interface ListboxConfigContext {
+  id: string | undefined;
+  disabled: boolean;
+  multiple: boolean | 'opt-in';
+  orientation: 'vertical' | 'horizontal';
+  highlightItemOnHover: boolean;
+  isItemEqualToValue: (itemValue: any, value: any) => boolean;
+  /** Every item, flattened when grouped. */
+  items: readonly any[] | undefined;
+  /** Whether only some of the items render, so the rest are read through the collection. */
+  hasRange: boolean;
+}
+
+/**
+ * The Root's settings, which rarely change and are the same for every part. Parts read them from
+ * here rather than each subscribing to the store, which is for state that changes often, such as
+ * which item is highlighted or selected.
+ */
+export const ListboxConfigContext = React.createContext<ListboxConfigContext | null>(null);
+
+export function useListboxConfigContext() {
+  const config = React.useContext(ListboxConfigContext);
+  if (config === null) {
+    throw new Error(
+      'Base UI: ListboxConfigContext is missing. Listbox parts must be placed within <Listbox.Root>.',
+    );
+  }
+  return config;
+}
+
 export function useListboxRootContext() {
   const store = React.useContext(ListboxRootContext);
   if (store === null) {

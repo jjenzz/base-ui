@@ -17,7 +17,7 @@ import { createChangeEventDetails } from '../../internals/createBaseUIEventDetai
 import { REASONS } from '../../internals/reasons';
 import { useCompositeListItem } from '../../internals/composite';
 import { findItemIndex } from '../../internals/itemEquality';
-import { useListboxRootContext } from '../root/ListboxRootContext';
+import { useListboxConfigContext, useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
 import { CollectionItemIndexContext, useCollectionItem } from '../../internals/collection';
@@ -58,6 +58,7 @@ export const ListboxItem = React.memo(
     forwardedRef: React.ForwardedRef<HTMLElement>,
   ) {
     const { label, value = null, disabled = false, children } = componentProps;
+    const { disabled: rootDisabled } = useListboxConfigContext();
 
     // The element whose text is the label when there's no `label` and the text is nested: the
     // rendered item, or a bare `<span>` in the hidden fragment. The last one is kept, so the label
@@ -73,11 +74,10 @@ export const ListboxItem = React.memo(
     const data = React.useMemo<ListboxItemData>(
       () => ({
         value,
-        // The root's `disabled` is applied when the data is read.
-        disabled,
+        disabled: rootDisabled || disabled,
         getLabel: () => plainLabel ?? textElementRef.current?.textContent ?? null,
       }),
-      [value, disabled, plainLabel],
+      [value, rootDisabled, disabled, plainLabel],
     );
     const item = useCollectionItem(data);
 
@@ -120,9 +120,14 @@ const ListboxItemView = React.memo(function ListboxItemView(
   } = componentProps;
 
   const store = useListboxRootContext();
-  const items = store.useState('items');
-  const hasRange = store.useState('hasRange');
-  const isItemEqualToValue = store.useState('isItemEqualToValue');
+  const {
+    items,
+    hasRange,
+    isItemEqualToValue,
+    multiple,
+    highlightItemOnHover,
+    disabled: rootDisabled,
+  } = useListboxConfigContext();
 
   // With `items`, `Listbox.List` renders each item and passes its position, since a virtualized
   // list renders only some of the items and their order in the DOM doesn't match their position.
@@ -141,10 +146,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
     index: indexFromList ?? indexFromItems,
   });
 
-  const multiple = store.useState('multiple');
   const optInMode = multiple === 'opt-in';
-  const highlightItemOnHover = store.useState('highlightItemOnHover');
-  const rootDisabled = store.useState('disabled');
   const active = store.useState('isActive', listItem.index);
   const highlighted = store.useState('isHighlighted', listItem.index);
   const selected = store.useState('isSelected', listItem.index, itemValue);

@@ -6,7 +6,7 @@ import type { BaseUIComponentProps } from '../../internals/types';
 import { useRenderElement } from '../../internals/useRenderElement';
 import { useLabel } from '../../internals/labelable-provider';
 import { focusElementWithVisible } from '../../internals/labelable-provider/useLabel';
-import { useListboxRootContext } from '../root/ListboxRootContext';
+import { useListboxConfigContext, useListboxRootContext } from '../root/ListboxRootContext';
 
 function getDefaultLabelId(rootId: string | undefined) {
   return rootId ? `${rootId}-label` : undefined;
@@ -29,7 +29,7 @@ export const ListboxLabel = React.forwardRef(function ListboxLabel(
   delete elementPropsWithoutId.id;
 
   const store = useListboxRootContext();
-  const rootId = store.useState('id');
+  const { id: rootId } = useListboxConfigContext();
 
   const defaultLabelId = getDefaultLabelId(rootId);
 
