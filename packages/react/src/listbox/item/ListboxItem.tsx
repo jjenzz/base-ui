@@ -20,8 +20,8 @@ import { findItemIndex } from '../../internals/itemEquality';
 import { useListboxRootContext } from '../root/ListboxRootContext';
 import type { ListboxRoot } from '../root/ListboxRoot';
 import { ListboxItemContext } from './ListboxItemContext';
-import { ListboxItemIndexContext } from '../collection/ListboxCollectionContext';
-import { useListboxHiddenItemRegistration } from '../list/ListboxHiddenItems';
+import { CollectionItemIndexContext, useCollectionItem } from '../../internals/collection';
+import type { ListboxItemData } from '../utils/itemData';
 import type { SelectionAction } from '../utils/selectionReducer';
 
 function useListItemValueRegistration(params: {
@@ -57,17 +57,44 @@ export const ListboxItem = React.memo(
     componentProps: ListboxItem.Props,
     forwardedRef: React.ForwardedRef<HTMLElement>,
   ) {
-    // In the hidden root, the item only registers its data. It renders its text only while labels
-    // are being read and the text is nested in elements, so the label can be read from the DOM.
-    const hidden = useListboxHiddenItemRegistration(componentProps);
-    if (hidden) {
-      return hidden.rendersText ? (
-        <span ref={hidden.textRef}>{componentProps.children}</span>
-      ) : null;
+    const { label, value = null, disabled = false, children } = componentProps;
+
+    // The element whose text is the label when there's no `label` and the text is nested: the
+    // rendered item, or a bare `<span>` in the hidden fragment. The last one is kept, so the label
+    // can still be read after a hidden item unmounts.
+    const textElementRef = React.useRef<HTMLElement | null>(null);
+    const setTextElement = React.useCallback((element: HTMLElement | null) => {
+      if (element) {
+        textElementRef.current = element;
+      }
+    }, []);
+    const plainLabel = label ?? (typeof children === 'string' ? children : null);
+
+    const data = React.useMemo<ListboxItemData>(
+      () => ({
+        value,
+        // The root's `disabled` is applied when the data is read.
+        disabled,
+        getLabel: () => plainLabel ?? textElementRef.current?.textContent ?? null,
+      }),
+      [value, disabled, plainLabel],
+    );
+    const item = useCollectionItem(data);
+
+    // In the hidden fragment, the item only registers its data. It renders its text only while
+    // labels are being read and the text is nested in elements.
+    if (item.hidden) {
+      return item.text && plainLabel == null ? <span ref={setTextElement}>{children}</span> : null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
-    return <ListboxItemView {...componentProps} forwardedRef={forwardedRef} />;
+    return (
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      <ListboxItemView
+        {...componentProps}
+        forwardedRef={forwardedRef}
+        textElementRef={setTextElement}
+      />
+    );
   }),
 );
 
@@ -75,9 +102,12 @@ export const ListboxItem = React.memo(
  * The rendered item. Takes its ref as `forwardedRef`.
  */
 const ListboxItemView = React.memo(function ListboxItemView(
-  viewProps: ListboxItem.Props & { forwardedRef: React.ForwardedRef<HTMLElement> },
+  viewProps: ListboxItem.Props & {
+    forwardedRef: React.ForwardedRef<HTMLElement>;
+    textElementRef: React.RefCallback<HTMLElement>;
+  },
 ) {
-  const { forwardedRef, ...componentProps } = viewProps;
+  const { forwardedRef, textElementRef, ...componentProps } = viewProps;
   const {
     render,
     className,
@@ -96,7 +126,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
 
   // With `items`, `Listbox.List` renders each item and passes its position, since a virtualized
   // list renders only some of the items and their order in the DOM doesn't match their position.
-  const indexFromList = React.useContext(ListboxItemIndexContext);
+  const indexFromList = React.useContext(CollectionItemIndexContext);
   const indexFromItems = React.useMemo(
     () =>
       indexFromList === undefined && items
@@ -138,18 +168,9 @@ const ListboxItemView = React.memo(function ListboxItemView(
       return undefined;
     }
 
-    // With `range`, the listbox reads a rendered item's data from here, and renders the items
-    // that aren't rendered when it needs theirs.
+    // With `range`, the item registers its data with the collection instead.
     if (hasRange) {
-      const { renderedItems } = store.context;
-      renderedItems.set(index, {
-        getLabel: () => label ?? itemRef.current?.textContent ?? null,
-        disabled: rootDisabled || disabled,
-        value: itemValue,
-      });
-      return () => {
-        renderedItems.delete(index);
-      };
+      return undefined;
     }
 
     const disabledItems = disabledItemsRef.current;
@@ -158,17 +179,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
     return () => {
       delete disabledItems[index];
     };
-  }, [
-    disabled,
-    disabledItemsRef,
-    hasRange,
-    hasRegistered,
-    index,
-    itemValue,
-    label,
-    rootDisabled,
-    store,
-  ]);
+  }, [disabled, disabledItemsRef, hasRange, hasRegistered, index, rootDisabled]);
 
   // In a virtualized list, the list tracks whether the item holding the tab stop is rendered,
   // and takes its place in the tab order while it isn't.
@@ -383,7 +394,7 @@ const ListboxItemView = React.memo(function ListboxItemView(
   };
 
   const element = useRenderElement('div', componentProps, {
-    ref: [buttonRef, forwardedRef, listItem.ref, itemRef],
+    ref: [buttonRef, forwardedRef, listItem.ref, itemRef, textElementRef],
     state,
     props: [defaultProps, elementProps, getButtonProps],
   });

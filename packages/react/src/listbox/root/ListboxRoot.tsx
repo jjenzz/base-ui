@@ -15,7 +15,6 @@ import { useBaseUiId } from '../../internals/useBaseUiId';
 import { defaultItemEquality } from '../../internals/itemEquality';
 import { ListboxItemsContext, ListboxRootContext } from './ListboxRootContext';
 import { ListboxStore } from '../store';
-import { createItemDataRef } from '../utils/itemData';
 import { flattenLeafItems, isGroupedItems } from '../../internals/resolveValueLabel';
 import { useHighlightChangeNotifier } from '../utils/useHighlightChangeNotifier';
 
@@ -73,9 +72,9 @@ export function ListboxRoot<Value, Multiple extends boolean | 'opt-in' | undefin
     return value == null ? EMPTY_ARRAY : [value];
   }, [value, multiple]);
 
-  const labelsRef = useRefWithInit(createItemDataRef<string | null>).current;
-  const valuesRef = useRefWithInit(createItemDataRef<any>).current;
-  const disabledItemsRef = useRefWithInit(createItemDataRef<boolean | undefined>).current;
+  const labelsRef = React.useRef<Array<string | null>>([]);
+  const valuesRef = React.useRef<Array<any>>([]);
+  const disabledItemsRef = React.useRef<Array<boolean | undefined>>([]);
   const typingRef = React.useRef(false);
   const lastSelectedIndexRef = React.useRef<number | null>(null);
 

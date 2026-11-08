@@ -4,7 +4,8 @@ import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
 import { ListboxItemsContext, useListboxRootContext } from '../root/ListboxRootContext';
 import { useListboxGroupContext } from '../group/ListboxGroupContext';
-import { ListboxItemIndexContext, ListboxListGroupContext } from './ListboxCollectionContext';
+import { CollectionItemIndex } from '../../internals/collection';
+import { ListboxListGroupContext } from './ListboxCollectionContext';
 
 /**
  * Renders the items: those of the enclosing `Listbox.Group` when it has `items`, otherwise every
@@ -45,9 +46,9 @@ export function ListboxCollection(props: ListboxCollection.Props): React.JSX.Ele
   for (let position = from; position <= to; position += 1) {
     const index = offset + position;
     rendered.push(
-      <ListboxItemIndexContext.Provider key={index} value={index}>
+      <CollectionItemIndex key={index} value={index}>
         {children(source[position], position)}
-      </ListboxItemIndexContext.Provider>,
+      </CollectionItemIndex>,
     );
   }
 

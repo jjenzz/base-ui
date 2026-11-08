@@ -3,8 +3,7 @@ import { ReactStore, createSelector } from '@base-ui/utils/store';
 import { compareItemEquality } from '../internals/itemEquality';
 import type { ListboxRoot } from './root/ListboxRoot';
 import type { SelectionAction } from './utils/selectionReducer';
-import { createItemDataRef } from './utils/itemData';
-import type { ItemDataRef, ListboxItemData } from './utils/itemData';
+import type { ListboxItemReader } from './utils/itemData';
 
 export type State = {
   id: string | undefined;
@@ -43,9 +42,12 @@ export type State = {
 };
 
 export type Context = {
-  valuesRef: ItemDataRef<any>;
-  labelsRef: ItemDataRef<string | null>;
-  disabledItemsRef: ItemDataRef<boolean | undefined>;
+  /** The rendered items' values, labels and disabled states, by position, without `range`. */
+  valuesRef: React.RefObject<Array<any>>;
+  labelsRef: React.RefObject<Array<string | null>>;
+  disabledItemsRef: React.RefObject<Array<boolean | undefined>>;
+  /** Reads any item's data by position, with or without `range`. Set by `Listbox.List`. */
+  itemReader: ListboxItemReader;
   typingRef: React.RefObject<boolean>;
   lastSelectedIndexRef: React.RefObject<number | null>;
   setValue: (nextValue: any, eventDetails: ListboxRoot.ChangeEventDetails) => void;
@@ -60,8 +62,6 @@ export type Context = {
    * reading the data of items that aren't rendered.
    */
   itemTemplates: Map<number, (item: any, index: number) => React.ReactNode>;
-  /** How to read the label and disabled state of each rendered item, with `range`. */
-  renderedItems: Map<number, ListboxItemData>;
   /**
    * Commits a selection action. With `range`, a range that reaches many items that aren't
    * rendered resolves over a few tasks, so it doesn't block the page.
@@ -200,9 +200,16 @@ function createInitialState(): State {
 
 function createInitialContext(): Context {
   return {
-    valuesRef: createItemDataRef(),
-    labelsRef: createItemDataRef(),
-    disabledItemsRef: createItemDataRef(),
+    valuesRef: { current: [] },
+    labelsRef: { current: [] },
+    disabledItemsRef: { current: [] },
+    itemReader: {
+      count: () => 0,
+      getLabel: () => null,
+      getValue: () => undefined,
+      isDisabled: () => false,
+      peekValue: () => undefined,
+    },
     typingRef: { current: false },
     lastSelectedIndexRef: { current: null },
     setValue: () => {},
@@ -210,7 +217,6 @@ function createInitialContext(): Context {
     pendingFocusIndexRef: { current: null },
     onItemFocus: () => {},
     itemTemplates: new Map(),
-    renderedItems: new Map(),
     commitSelection: () => {},
   };
 }

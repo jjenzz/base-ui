@@ -56,14 +56,14 @@ export function useHighlightChangeNotifier<Value>(params: {
         if (previous == null) {
           return {
             index: highlightedIndex,
-            value: store.context.renderedItems.get(highlightedIndex)?.value,
+            value: store.context.itemReader.peekValue(highlightedIndex),
           };
         }
       }
 
       return {
         index: highlightedIndex,
-        value: store.context.valuesRef.current[highlightedIndex] as Value | undefined,
+        value: store.context.itemReader.getValue(highlightedIndex) as Value | undefined,
       };
     },
   );

@@ -15,28 +15,34 @@ export type SelectionAction =
   | { type: 'selectAll' }
   | { type: 'clear' };
 
+/** Reads the items the reducer selects from, by position. */
+export interface SelectionItems {
+  count: number;
+  getValue: (index: number) => any;
+  isDisabled: (index: number) => boolean;
+}
+
 /**
  * Pure reducer that computes the next selection value from an action.
  * Has no side effects — does not touch refs, store, or DOM.
  *
  * @param action - What the user intends to do.
  * @param currentValue - The current selected values array.
- * @param valuesRef - The flat array of all registered item values (indexed by composite position).
- * @param disabledItemsRef - The flat array of disabled item flags (indexed by composite position).
+ * @param items - Reads each item's value and disabled state, by position.
  * @param isItemEqualToValue - Custom equality comparator.
  * @returns The new selected values array.
  */
 export function selectionReducer(
   action: SelectionAction,
   currentValue: any[],
-  valuesRef: any[],
-  disabledItemsRef: Array<boolean | undefined>,
+  items: SelectionItems,
   isItemEqualToValue: (a: any, b: any) => boolean,
 ): any[] {
+  const { count, getValue, isDisabled } = items;
   switch (action.type) {
     case 'select': {
-      const itemValue = valuesRef[action.index];
-      if (itemValue === undefined || disabledItemsRef[action.index]) {
+      const itemValue = getValue(action.index);
+      if (itemValue === undefined || isDisabled(action.index)) {
         return currentValue;
       }
       return [itemValue];
@@ -45,16 +51,16 @@ export function selectionReducer(
     // Moving focus in opt-in mode: the focused item becomes the selection, and a disabled one
     // can't be selected, so nothing is.
     case 'moveSelection': {
-      const itemValue = valuesRef[action.index];
-      if (itemValue === undefined || disabledItemsRef[action.index]) {
+      const itemValue = getValue(action.index);
+      if (itemValue === undefined || isDisabled(action.index)) {
         return EMPTY_ARRAY as any[];
       }
       return [itemValue];
     }
 
     case 'toggle': {
-      const itemValue = valuesRef[action.index];
-      if (itemValue === undefined || disabledItemsRef[action.index]) {
+      const itemValue = getValue(action.index);
+      if (itemValue === undefined || isDisabled(action.index)) {
         return currentValue;
       }
       const isSelected = currentValue.some((v) =>
@@ -70,17 +76,15 @@ export function selectionReducer(
       const anchorIndex = action.anchorIndex;
       if (anchorIndex === null) {
         // No anchor — treat as a single select
-        const itemValue = valuesRef[action.index];
-        return itemValue !== undefined && !disabledItemsRef[action.index]
-          ? [itemValue]
-          : currentValue;
+        const itemValue = getValue(action.index);
+        return itemValue !== undefined && !isDisabled(action.index) ? [itemValue] : currentValue;
       }
       const start = Math.min(anchorIndex, action.index);
       const end = Math.max(anchorIndex, action.index);
       const rangeValues: any[] = [];
       for (let i = start; i <= end; i += 1) {
-        const val = valuesRef[i];
-        if (val !== undefined && !disabledItemsRef[i]) {
+        const val = getValue(i);
+        if (val !== undefined && !isDisabled(i)) {
           rangeValues.push(val);
         }
       }
@@ -92,10 +96,10 @@ export function selectionReducer(
       const end = Math.max(action.from, action.to);
       const nextValue = [...currentValue];
       for (let i = start; i <= end; i += 1) {
-        const val = valuesRef[i];
+        const val = getValue(i);
         if (
           val !== undefined &&
-          !disabledItemsRef[i] &&
+          !isDisabled(i) &&
           !nextValue.some((v) => compareItemEquality(val, v, isItemEqualToValue))
         ) {
           nextValue.push(val);
@@ -105,7 +109,14 @@ export function selectionReducer(
     }
 
     case 'selectAll': {
-      return valuesRef.filter((v, index) => v !== undefined && !disabledItemsRef[index]);
+      const nextValue: any[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const val = getValue(i);
+        if (val !== undefined && !isDisabled(i)) {
+          nextValue.push(val);
+        }
+      }
+      return nextValue;
     }
 
     case 'clear': {

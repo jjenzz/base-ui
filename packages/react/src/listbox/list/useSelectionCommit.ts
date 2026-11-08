@@ -1,16 +1,15 @@
 'use client';
+import * as React from 'react';
 import { useStableCallback } from '@base-ui/utils/useStableCallback';
 import type { ListboxStore } from '../store';
 import type { ListboxRoot } from '../root/ListboxRoot';
+import type { ListboxItemData } from '../utils/itemData';
+import type { Collection } from '../../internals/collection';
 import { selectionReducer } from '../utils/selectionReducer';
 import type { SelectionAction } from '../utils/selectionReducer';
-import { useBrowserYield } from '../utils/useBrowserYield';
 
-// With `range`, a selection that spans more items than this resolves over several tasks, each
-// working for about SLICE_MS, reading CHUNK_SIZE items at a time.
+// With `range`, a selection that spans more items than this reads them over several tasks.
 const ASYNC_THRESHOLD = 1000;
-const CHUNK_SIZE = 250;
-const SLICE_MS = 8;
 
 /** The first and last position a selection action reads, when it reads a span of items. */
 function getActionSpan(action: SelectionAction, count: number): [number, number] | null {
@@ -29,65 +28,62 @@ function getActionSpan(action: SelectionAction, count: number): [number, number]
 }
 
 /**
- * Commits selection actions. A span of many items that aren't rendered, such as Ctrl/Cmd+A, has
- * to render them to read their values and disabled states, so it resolves a chunk at a time
- * without blocking the page, and commits once. `cancel` drops one that's still resolving.
+ * Commits selection actions. A span of many items that aren't rendered, such as Ctrl/Cmd+A, is
+ * read without blocking the page, then committed once. `cancelPendingSelection` drops one that's
+ * still being read.
  */
 export function useSelectionCommit(params: {
   store: ListboxStore;
-  readRange: (start: number, end: number, values: any[], disabled: boolean[]) => void;
+  collection: Collection<ListboxItemData>;
 }) {
-  const { store, readRange } = params;
-  const resolveYield = useBrowserYield();
+  const { store, collection } = params;
+  const cancelRef = React.useRef<(() => void) | null>(null);
+
+  const cancelPendingSelection = useStableCallback(() => {
+    cancelRef.current?.();
+    cancelRef.current = null;
+  });
 
   const commitSelection = useStableCallback(
     (action: SelectionAction, eventDetails: ListboxRoot.ChangeEventDetails) => {
-      resolveYield.cancel();
-      const { setValue, valuesRef, disabledItemsRef } = store.context;
-      const commit = (values: any[], disabled: Array<boolean | undefined>) => {
+      cancelPendingSelection();
+      const { setValue, itemReader } = store.context;
+      const { value, isItemEqualToValue, range } = store.state;
+      const count = itemReader.count();
+
+      const span = range != null ? getActionSpan(action, count) : null;
+      if (!span || span[1] - span[0] + 1 <= ASYNC_THRESHOLD) {
+        setValue(
+          selectionReducer(
+            action,
+            value,
+            { count, getValue: itemReader.getValue, isDisabled: itemReader.isDisabled },
+            isItemEqualToValue,
+          ),
+          eventDetails,
+        );
+        return;
+      }
+
+      cancelRef.current = collection.readSpan(span[0], span[1], (data) => {
+        cancelRef.current = null;
         setValue(
           selectionReducer(
             action,
             store.state.value,
-            values,
-            disabled,
+            {
+              count,
+              getValue: (index) => data[index]?.value,
+              isDisabled: (index) => store.state.disabled || (data[index]?.disabled ?? false),
+            },
             store.state.isItemEqualToValue,
           ),
           eventDetails,
         );
-      };
-
-      const count = store.state.items?.length ?? 0;
-      const span = store.state.range != null ? getActionSpan(action, count) : null;
-      if (!span || span[1] - span[0] + 1 <= ASYNC_THRESHOLD) {
-        commit(valuesRef.current, disabledItemsRef.current);
-        return;
-      }
-
-      const values: any[] = new Array(count);
-      const disabled: boolean[] = new Array(count);
-      const token = resolveYield.token();
-      let next = span[0];
-      const resolveSlice = () => {
-        if (token !== resolveYield.token()) {
-          return;
-        }
-        const sliceStart = performance.now();
-        while (next <= span[1] && performance.now() - sliceStart < SLICE_MS) {
-          const end = Math.min(span[1] + 1, next + CHUNK_SIZE);
-          readRange(next, end, values, disabled);
-          next = end;
-        }
-        if (next > span[1]) {
-          commit(values, disabled);
-        } else {
-          resolveYield.schedule(resolveSlice);
-        }
-      };
-      resolveYield.schedule(resolveSlice);
+      });
     },
   );
   store.useContextCallback('commitSelection', commitSelection);
 
-  return { commitSelection, cancelPendingSelection: resolveYield.cancel };
+  return { commitSelection, cancelPendingSelection };
 }

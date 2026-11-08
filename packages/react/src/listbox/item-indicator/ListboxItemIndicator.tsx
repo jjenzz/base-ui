@@ -7,7 +7,7 @@ import { useOpenChangeComplete } from '../../internals/useOpenChangeComplete';
 import { useRenderElement } from '../../internals/useRenderElement';
 import { transitionStatusMapping } from '../../internals/stateAttributesMapping';
 import { useListboxItemContext } from '../item/ListboxItemContext';
-import { ListboxHiddenItemsContext } from '../list/ListboxHiddenItems';
+import { useIsHiddenCollectionItem } from '../../internals/collection';
 
 const Inner = React.memo(
   React.forwardRef(
@@ -69,7 +69,7 @@ export const ListboxItemIndicator = React.forwardRef(function ListboxItemIndicat
   const keepMounted = componentProps.keepMounted ?? false;
 
   // Hidden items have no item context and render no indicators.
-  const hidden = React.useContext(ListboxHiddenItemsContext) != null;
+  const hidden = useIsHiddenCollectionItem();
   const itemContext = useListboxItemContext(hidden);
 
   const shouldRender = itemContext != null && (keepMounted || itemContext.selected);
