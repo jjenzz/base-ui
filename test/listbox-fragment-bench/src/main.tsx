@@ -104,9 +104,9 @@ const steps: Record<string, () => Promise<void | Record<string, number>>> = {
   async typeahead() {
     // A label in the middle of the list, typed one key per task.
     const target = items[Math.floor(items.length / 2) + 1].label;
-    const slowestKey = await typeKeys(target, 0);
+    const result = await typeKeys(target, 0);
     check(active() === target, `typeahead: ${active()} != ${target}`);
-    return { slowestKey };
+    return result;
   },
 
   async selectAll() {
@@ -124,9 +124,9 @@ const steps: Record<string, () => Promise<void | Record<string, number>>> = {
     await inTask(() => {
       list().scrollTop += 64;
     });
-    const slowestKey = await typeKeys(target, 0);
+    const result = await typeKeys(target, 0);
     check(active() === target, `scrollThenType: ${active()} != ${target}`);
-    return { slowestKey };
+    return result;
   },
 
   async scrollThenSelectAll() {
@@ -137,18 +137,18 @@ const steps: Record<string, () => Promise<void | Record<string, number>>> = {
   },
   async typeaheadPaced() {
     const target = items[Math.floor(items.length / 2) + 7].label;
-    const slowestKey = await typeKeys(target, 120);
+    const result = await typeKeys(target, 120);
     check(active() === target, `typeaheadPaced: ${active()} != ${target}`);
-    return { slowestKey };
+    return result;
   },
   async scrollThenTypePaced() {
     const target = items[items.length - 10].label;
     await inTask(() => {
       list().scrollTop += 64;
     });
-    const slowestKey = await typeKeys(target, 120);
+    const result = await typeKeys(target, 120);
     check(active() === target, `scrollThenTypePaced: ${active()} != ${target}`);
-    return { slowestKey };
+    return result;
   },
   async rebuild() {
     // New objects with the same data, as when items are mapped from fetched data again.
@@ -179,19 +179,43 @@ const steps: Record<string, () => Promise<void | Record<string, number>>> = {
 // Types one key per task, `gap` ms apart, and reports the slowest keystroke: from dispatching it
 // to its render finishing.
 async function typeKeys(text: string, gap: number) {
-  let slowest = 0;
+  // A heartbeat records the longest stretch the page couldn't respond during, including work that
+  // a key press leaves for later tasks.
+  let longestTask = 0;
+  let last = performance.now();
+  let beating = true;
+  const beat = () => {
+    const now = performance.now();
+    longestTask = Math.max(longestTask, now - last);
+    last = now;
+    if (beating) {
+      setTimeout(beat, 0);
+    }
+  };
+  setTimeout(beat, 0);
+
+  let slowestKey = 0;
+  let lastKeyAt = 0;
   for (const key of text.toLowerCase()) {
     const start = performance.now();
+    lastKeyAt = start;
     // eslint-disable-next-line no-await-in-loop
     await inTask(() => pressKey(key));
-    slowest = Math.max(slowest, performance.now() - start);
+    slowestKey = Math.max(slowestKey, performance.now() - start);
     if (gap > 0) {
       // eslint-disable-next-line no-await-in-loop
       await new Promise((resolve) => setTimeout(resolve, gap));
     }
   }
+  // A search can finish after the key press, once the labels it reached have been read.
+  while (active() !== text && performance.now() - lastKeyAt < 3000) {
+    // eslint-disable-next-line no-await-in-loop
+    await nextFrame();
+  }
+  const untilMatch = performance.now() - lastKeyAt;
+  beating = false;
   await settle();
-  return slowest;
+  return { slowestKey, longestTask, untilMatch };
 }
 
 // Unmeasured setup before a step: focus a rendered item and let any typing session end.
