@@ -45,6 +45,7 @@
     "./fieldset": "./src/fieldset/index.ts",
     "./form": "./src/form/index.ts",
     "./input": "./src/input/index.ts",
+    "./listbox": "./src/listbox/index.ts",
     "./menu": "./src/menu/index.ts",
     "./menubar": "./src/menubar/index.ts",
     "./merge-props": "./src/merge-props/index.ts",
@@ -136,6 +137,10 @@
   },
   "devDependencies": {
     "@date-fns/tz": "1.5.0",
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
+    "@tanstack/react-virtual": "3.14.13",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",
     "@types/luxon": "3.7.6",

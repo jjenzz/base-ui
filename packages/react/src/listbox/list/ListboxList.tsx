@@ -1,0 +1,763 @@
+'use client';
+import * as React from 'react';
+import { platform } from '@base-ui/utils/platform';
+import { useStableCallback } from '@base-ui/utils/useStableCallback';
+import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
+import { EMPTY_ARRAY } from '@base-ui/utils/empty';
+import { ownerDocument } from '@base-ui/utils/owner';
+import { useRefWithInit } from '@base-ui/utils/useRefWithInit';
+import { warn } from '@base-ui/utils/warn';
+import { SafeReact } from '@base-ui/utils/safeReact';
+import type { BaseUIComponentProps, HTMLProps } from '../../internals/types';
+import { useRenderElement } from '../../internals/useRenderElement';
+import { useDirection } from '../../internals/direction-context';
+import { createChangeEventDetails } from '../../internals/createBaseUIEventDetails';
+import { REASONS } from '../../internals/reasons';
+import { TYPEAHEAD_RESET_MS } from '../../internals/constants';
+import { compareItemEquality } from '../../internals/itemEquality';
+import { useCompositeRoot, CompositeList } from '../../internals/composite';
+import { activeElement, contains } from '../../floating-ui-react/utils';
+import { stopEvent } from '../../floating-ui-react/utils/event';
+import { useTypeahead } from '../../floating-ui-react';
+import {
+  ListboxItemsContext,
+  useListboxConfigContext,
+  useListboxRootContext,
+} from '../root/ListboxRootContext';
+import type { ListboxRoot } from '../root/ListboxRoot';
+import type { SelectionAction } from '../utils/selectionReducer';
+import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
+import { ListboxListGroupContext } from '../collection/ListboxCollectionContext';
+import { useSelectionCommit } from './useSelectionCommit';
+import type { ListboxItemData, ListboxItemReader, ListboxItemSnapshot } from '../utils/itemData';
+import { CollectionProvider, useCollection } from '../../internals/collection';
+
+// Finding the first selected item reads this many items at a time.
+const TAB_STOP_SCAN_CHUNK = 250;
+// A typeahead search reads this many labels at a time from where it reaches an unread one.
+const TYPEAHEAD_READ_CHUNK = 100;
+
+// Keeps an item's value and disabled state and, when its text was read, its label as a string.
+function snapshotItem(data: ListboxItemData, text: boolean): ListboxItemSnapshot {
+  return { value: data.value, disabled: data.disabled, label: text ? data.getLabel() : undefined };
+}
+
+/**
+ * A container for the listbox items.
+ * Renders a `<div>` element.
+ *
+ * Documentation: [Base UI Listbox](https://base-ui.com/react/components/listbox)
+ */
+
+export const ListboxList = React.forwardRef(function ListboxList(
+  componentProps: ListboxList.Props,
+  forwardedRef: React.ForwardedRef<HTMLDivElement>,
+) {
+  const { className, render, style, children, ...elementProps } = componentProps;
+
+  const store = useListboxRootContext();
+
+  const { id, orientation, disabled, multiple } = useListboxConfigContext();
+  const labelId = store.useState('labelId');
+  const activeIndex = store.useState('activeIndex');
+  const { items, itemGroups, range } = React.useContext(ListboxItemsContext);
+  // With `items`, the list knows every item, including those that aren't rendered.
+  const itemCount = items?.length;
+  const activeItemRendered = store.useState('activeItemRendered');
+  const optInMode = multiple === 'opt-in';
+  const direction = useDirection();
+  const { lastSelectedIndexRef, typingRef } = store.context;
+
+  const childrenIsFunction = typeof children === 'function';
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || !items || childrenIsFunction) {
+      return;
+    }
+    warn(
+      '<Listbox.List> needs a function as its children when `items` is passed to <Listbox.Root>. ' +
+        'Render each item with `{(item, index) => <Listbox.Item …>}`, or remove `items`.',
+      SafeReact.captureOwnerStack?.() || '',
+    );
+  }, [items, childrenIsFunction]);
+
+  // Each group's position and the position of its first item in the whole list.
+  const groupInfos = React.useMemo(() => {
+    if (!itemGroups) {
+      return undefined;
+    }
+    let offset = 0;
+    return itemGroups.map((group, index) => {
+      const info = { index, offset, size: group.items.length };
+      offset += group.items.length;
+      return info;
+    });
+  }, [itemGroups]);
+
+  // With `range`, items that aren't rendered still take part in typeahead and selection: the
+  // collection renders them into a hidden fragment when their data is read. Each renders with the
+  // latest render function of its group's `Listbox.Collection`; a group that isn't rendered uses
+  // one that is.
+  const renderWithTemplate = (item: unknown, index: number) => {
+    const { itemTemplates } = store.context;
+    let groupIndex = -1;
+    let offset = 0;
+    for (const info of groupInfos ?? []) {
+      if (info.offset > index) {
+        break;
+      }
+      groupIndex = info.index;
+      offset = info.offset;
+    }
+    let template = itemTemplates.get(groupIndex);
+    if (!template) {
+      itemTemplates.forEach((candidate) => {
+        template = candidate;
+      });
+    }
+    return template ? template(item, index - offset) : null;
+  };
+  const collection = useCollection<unknown, ListboxItemData, ListboxItemSnapshot>({
+    items,
+    render: renderWithTemplate,
+    enabled: range != null,
+    snapshot: snapshotItem,
+  });
+
+  // Every part reads item data through the collection: rendered items from what they registered,
+  // and, with `range`, the rest from what was read by rendering them into the hidden fragment.
+  const itemReader = useRefWithInit((): ListboxItemReader => ({
+    count: collection.count,
+    getLabel: (index) => collection.peek(index, { text: true })?.label,
+    getValue: (index) => collection.peek(index)?.value,
+    isDisabled: (index) => collection.peek(index)?.disabled ?? false,
+    read: collection.read,
+  })).current;
+  useIsoLayoutEffect(() => {
+    store.context.itemReader = itemReader;
+  }, [store, itemReader]);
+
+  const { commitSelection, cancelPendingSelection } = useSelectionCommit({ store });
+
+  /**
+   * Commits a selection action and moves the anchor for Shift+Click ranges.
+   */
+  const dispatchSelection = useStableCallback(
+    (
+      action: SelectionAction,
+      eventDetails: ListboxRoot.ChangeEventDetails,
+      anchorIndex?: number,
+    ) => {
+      commitSelection(action, eventDetails);
+      if (anchorIndex !== undefined) {
+        lastSelectedIndexRef.current = anchorIndex;
+      }
+    },
+  );
+
+  // The keydown being handled by the list, so composite navigation can report it.
+  const keyDownEventRef = React.useRef<KeyboardEvent | undefined>(undefined);
+  // Where a Shift+Arrow range starts: the item focused when Shift was pressed.
+  const shiftAnchorRef = React.useRef<number | null>(null);
+  // In opt-in mode, an arrow key that moved focus to an item that isn't rendered selects it once
+  // it renders and receives focus.
+  const pendingSelectRef = React.useRef<{ index: number; event: KeyboardEvent } | null>(null);
+
+  const onHighlightedIndexChange = useStableCallback((index: number) => {
+    const event = keyDownEventRef.current;
+    if (event) {
+      // Keyboard navigation focuses the item next.
+      store.highlightItem(index, event);
+    } else {
+      // Items were added or removed, so the tab stop moves without focus moving.
+      store.setActiveIndex(index);
+    }
+
+    // In opt-in mode, moving focus with an arrow key and no modifier moves the selection to
+    // the focused item (the APG alternative multiple selection model).
+    if (
+      optInMode &&
+      event &&
+      event.key.startsWith('Arrow') &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      dispatchSelection(
+        { type: 'moveSelection', index },
+        createChangeEventDetails(REASONS.listNavigation, event),
+        index,
+      );
+    }
+  });
+
+  /**
+   * The item that should receive focus when the list receives focus: the first selected item,
+   * or the first item when nothing is selected, as the APG listbox pattern describes.
+   */
+  const isSelectedValue = (itemValue: unknown) => {
+    const { value: selectedValues, isItemEqualToValue } = store.state;
+    return (
+      itemValue !== undefined &&
+      selectedValues.some((selectedValue) =>
+        compareItemEquality(itemValue, selectedValue, isItemEqualToValue),
+      )
+    );
+  };
+
+  const getTabStopIndex = useStableCallback((): number | null => {
+    if (store.state.value.length === 0) {
+      return 0;
+    }
+    // With `range`, finding the first selected item can mean reading items that aren't rendered,
+    // so the list holds the tab stop and finds the item when it receives focus.
+    if (store.state.range != null) {
+      return null;
+    }
+    const count = itemReader.count();
+    for (let index = 0; index < count; index += 1) {
+      if (isSelectedValue(itemReader.getValue(index))) {
+        return index;
+      }
+    }
+    return 0;
+  });
+
+  // With `range`, finds the first selected item by reading the items in order, a chunk at a time,
+  // then calls `done` with it, or with the first item when none is selected.
+  const tabStopScanRef = React.useRef<(() => void) | null>(null);
+  const findTabStop = useStableCallback((done: (index: number) => void) => {
+    tabStopScanRef.current?.();
+    const count = itemReader.count();
+    const scanFrom = (start: number) => {
+      const end = Math.min(count, start + TAB_STOP_SCAN_CHUNK) - 1;
+      tabStopScanRef.current = itemReader.read(
+        start,
+        end,
+        { urgent: true, chunkSize: TAB_STOP_SCAN_CHUNK },
+        (lookup) => {
+          for (let index = start; index <= end; index += 1) {
+            if (isSelectedValue(lookup(index)?.value)) {
+              tabStopScanRef.current = null;
+              done(index);
+              return;
+            }
+          }
+          if (end + 1 < count) {
+            scanFrom(end + 1);
+          } else {
+            tabStopScanRef.current = null;
+            done(0);
+          }
+        },
+      );
+    };
+    scanFrom(0);
+  });
+
+  const composite = useCompositeRoot({
+    orientation,
+    // The APG listbox pattern doesn't wrap focus from the last option to the first.
+    loopFocus: false,
+    highlightedIndex: activeIndex ?? 0,
+    onHighlightedIndexChange,
+    direction,
+    enableHomeAndEndKeys: true,
+    stopEventPropagation: false,
+    // Listbox items remain keyboard-focusable even when disabled; selection
+    // logic still guards against activating them.
+    disabledIndices: EMPTY_ARRAY as number[],
+  });
+
+  /**
+   * Highlights an item and moves focus to it. In a virtualized list, the item may not be rendered
+   * yet, so the list holds focus until it renders and the item takes focus from the list.
+   */
+  const focusItem = useStableCallback((index: number, event: Event | undefined) => {
+    const { pendingFocusIndexRef } = store.context;
+    pendingFocusIndexRef.current = null;
+    store.highlightItem(index, event);
+
+    const element = composite.elementsRef.current[index];
+    if (element) {
+      element.focus();
+      return;
+    }
+
+    pendingFocusIndexRef.current = index;
+    store.state.listElement?.focus({ preventScroll: true });
+  });
+
+  // An item that an arrow key moved focus to in opt-in mode is selected once it renders.
+  const onItemFocus = useStableCallback((index: number) => {
+    const pendingSelect = pendingSelectRef.current;
+    if (pendingSelect?.index !== index) {
+      return;
+    }
+    pendingSelectRef.current = null;
+    dispatchSelection(
+      { type: 'moveSelection', index },
+      createChangeEventDetails(REASONS.listNavigation, pendingSelect.event),
+      index,
+    );
+  });
+  store.useContextCallback('onItemFocus', onItemFocus);
+
+  /**
+   * Arrow keys, Home and End with `items`. The composite only knows the rendered items, so the
+   * list moves by index instead, through every item.
+   */
+  const handleVirtualizedNavigation = useStableCallback((event: React.KeyboardEvent) => {
+    if (itemCount == null || itemCount === 0) {
+      return;
+    }
+    if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
+    const isRtl = direction === 'rtl';
+    let forwardKey = 'ArrowDown';
+    let backwardKey = 'ArrowUp';
+    if (orientation === 'horizontal') {
+      forwardKey = isRtl ? 'ArrowLeft' : 'ArrowRight';
+      backwardKey = isRtl ? 'ArrowRight' : 'ArrowLeft';
+    }
+    const currentIndex = store.state.activeIndex ?? 0;
+
+    let targetIndex: number;
+    if (event.key === forwardKey) {
+      targetIndex = Math.min(currentIndex + 1, itemCount - 1);
+    } else if (event.key === backwardKey) {
+      targetIndex = Math.max(currentIndex - 1, 0);
+    } else if (event.key === 'Home') {
+      targetIndex = 0;
+    } else if (event.key === 'End') {
+      targetIndex = itemCount - 1;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    if (targetIndex === currentIndex) {
+      return;
+    }
+
+    pendingSelectRef.current = null;
+    focusItem(targetIndex, event.nativeEvent);
+
+    // In opt-in mode, the selection follows focus (the APG alternative multiple selection model).
+    if (optInMode && event.key.startsWith('Arrow')) {
+      if (composite.elementsRef.current[targetIndex]) {
+        dispatchSelection(
+          { type: 'moveSelection', index: targetIndex },
+          createChangeEventDetails(REASONS.listNavigation, event.nativeEvent),
+          targetIndex,
+        );
+      } else {
+        pendingSelectRef.current = { index: targetIndex, event: event.nativeEvent };
+      }
+    }
+  });
+
+  const typeaheadReadRef = React.useRef<(() => void) | null>(null);
+
+  // Typeahead, like Select and Menu: keys typed in quick succession build one search, which resets
+  // after a pause, and typing the same letter again cycles through the items that start with it.
+  const typeahead = useTypeahead({
+    // Labels that aren't known are read in chunks from where the search reaches them, so a match
+    // near the highlight reads only a few.
+    getLabel: itemReader.getLabel,
+    getCount: itemReader.count,
+    readLabels(from, done) {
+      // A later key replaces the search, so what an earlier one was reading isn't needed.
+      typeaheadReadRef.current?.();
+      typeaheadReadRef.current = itemReader.read(
+        from,
+        from + TYPEAHEAD_READ_CHUNK - 1,
+        { text: true, urgent: true },
+        () => {
+          typeaheadReadRef.current = null;
+          done();
+        },
+      );
+    },
+    elementsRef: composite.elementsRef,
+    activeIndex,
+    enabled: !disabled,
+    resetMs: TYPEAHEAD_RESET_MS,
+    onTyping(isTyping) {
+      typingRef.current = isTyping;
+      collection.hold(isTyping);
+      if (!isTyping) {
+        collection.readAhead.stop();
+      }
+    },
+    onMatch(index, event) {
+      focusItem(index, event.nativeEvent);
+    },
+  });
+
+  /**
+   * Maps keyboard events to selection actions based on the current selection mode.
+   * Only handles multi-item keyboard shortcuts (Shift+Arrow, Ctrl+Shift+Home/End, Ctrl+A).
+   * Single-item selection (Enter/Space) is handled in ListboxItem.
+   */
+  const handleSelectionKeyDown = useStableCallback((event: React.KeyboardEvent) => {
+    if (!multiple) {
+      return;
+    }
+
+    const isVertical = orientation === 'vertical';
+    const currentIndex = store.state.activeIndex;
+    const elements = composite.elementsRef.current;
+
+    const count = itemCount ?? elements.length;
+
+    // Opt-in mode: Ctrl+Arrow moves focus without changing the selection. macOS reserves
+    // Ctrl+Arrow and uses Cmd+Arrow to jump to the ends, so Option+Arrow does it there.
+    const isMoveWithoutSelecting = platform.os.mac
+      ? event.altKey && !event.ctrlKey && !event.metaKey
+      : event.ctrlKey || event.metaKey;
+    if (optInMode && isMoveWithoutSelecting && !event.shiftKey) {
+      const isRtl = direction === 'rtl';
+      const isPrev =
+        (isVertical && event.key === 'ArrowUp') ||
+        (!isVertical && (isRtl ? event.key === 'ArrowRight' : event.key === 'ArrowLeft'));
+      const isNext =
+        (isVertical && event.key === 'ArrowDown') ||
+        (!isVertical && (isRtl ? event.key === 'ArrowLeft' : event.key === 'ArrowRight'));
+
+      if ((isPrev || isNext) && currentIndex != null) {
+        event.preventDefault();
+        const targetIndex = isPrev ? currentIndex - 1 : currentIndex + 1;
+        if (store.isIndexInList(targetIndex, elements)) {
+          focusItem(targetIndex, event.nativeEvent);
+        }
+      }
+    }
+
+    // Shift+Arrow: Move focus and select the range from the anchor to the focused item,
+    // replacing the rest of the selection, so the range grows and shrinks as focus moves.
+    if (event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      const isRtl = direction === 'rtl';
+      const isPrev =
+        (isVertical && event.key === 'ArrowUp') ||
+        (!isVertical && (isRtl ? event.key === 'ArrowRight' : event.key === 'ArrowLeft'));
+      const isNext =
+        (isVertical && event.key === 'ArrowDown') ||
+        (!isVertical && (isRtl ? event.key === 'ArrowLeft' : event.key === 'ArrowRight'));
+
+      if ((isPrev || isNext) && currentIndex != null) {
+        const targetIndex = isPrev ? currentIndex - 1 : currentIndex + 1;
+
+        if (store.isIndexInList(targetIndex, elements)) {
+          event.preventDefault();
+          if (shiftAnchorRef.current === null) {
+            shiftAnchorRef.current = currentIndex;
+          }
+          const anchorIndex = shiftAnchorRef.current;
+          focusItem(targetIndex, event.nativeEvent);
+
+          commitSelection(
+            { type: 'extendTo', index: targetIndex, anchorIndex },
+            createChangeEventDetails(REASONS.listNavigation, event.nativeEvent, undefined, {
+              range: {
+                from: Math.min(anchorIndex, targetIndex),
+                to: Math.max(anchorIndex, targetIndex),
+                mode: 'replace',
+              },
+            }),
+          );
+        }
+      }
+    }
+
+    // Ctrl+Shift+Home: Select from focus to first
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'Home') {
+      event.preventDefault();
+      if (currentIndex != null) {
+        dispatchSelection(
+          { type: 'selectRange', from: 0, to: currentIndex },
+          createChangeEventDetails(REASONS.listNavigation, event.nativeEvent, undefined, {
+            range: { from: 0, to: currentIndex, mode: 'add' },
+          }),
+          0,
+        );
+        focusItem(0, event.nativeEvent);
+      }
+    }
+
+    // Ctrl+Shift+End: Select from focus to last
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'End') {
+      event.preventDefault();
+      if (currentIndex != null) {
+        const lastIndex = count - 1;
+        dispatchSelection(
+          { type: 'selectRange', from: currentIndex, to: lastIndex },
+          createChangeEventDetails(REASONS.listNavigation, event.nativeEvent, undefined, {
+            range: { from: currentIndex, to: lastIndex, mode: 'add' },
+          }),
+          lastIndex,
+        );
+        focusItem(lastIndex, event.nativeEvent);
+      }
+    }
+
+    // Ctrl+A / Cmd+A: Select all. The APG makes deselecting a fully selected list optional, and
+    // Escape already clears the selection.
+    if ((event.ctrlKey || event.metaKey) && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      dispatchSelection(
+        { type: 'selectAll' },
+        createChangeEventDetails(REASONS.listNavigation, event.nativeEvent, undefined, {
+          range: { from: 0, to: count - 1, mode: 'replace' },
+        }),
+      );
+    }
+  });
+
+  const setListElement = useStableCallback((element: HTMLElement | null) => {
+    store.set('listElement', element);
+  });
+
+  // In a virtualized list, the item that holds the tab stop may not be rendered, so the list takes
+  // its place in the tab order until it renders.
+  let tabIndex: number | undefined = -1;
+  if (disabled) {
+    tabIndex = undefined;
+  } else if (itemCount != null && itemCount > 0 && !activeItemRendered) {
+    tabIndex = 0;
+  }
+
+  const state: ListboxListState = {
+    disabled,
+    orientation,
+  };
+
+  const defaultProps: HTMLProps = {
+    id: id ? `${id}-list` : undefined,
+    role: 'listbox',
+    'aria-labelledby': labelId,
+    'aria-multiselectable': multiple ? true : undefined,
+    'aria-orientation': orientation,
+    tabIndex,
+    onFocus(event) {
+      const elements = composite.elementsRef.current;
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      // The list holds focus until the item it's waiting for renders.
+      if (store.context.pendingFocusIndexRef.current !== null) {
+        return;
+      }
+      // The list isn't a tab stop, but it can receive focus programmatically, such as from a
+      // `Listbox.Label` click. Pass focus on to the item that holds the tab stop.
+      const tabStop = store.state.activeIndex ?? getTabStopIndex();
+      if (tabStop == null) {
+        // With `range`, the first selected item may not be known yet, so the list holds focus
+        // until it's found.
+        const { nativeEvent } = event;
+        findTabStop((found) => focusItem(found, nativeEvent));
+        return;
+      }
+      const index = tabStop;
+      if (elements[index]) {
+        elements[index].focus();
+      } else if (itemCount != null && itemCount > 0) {
+        // The item isn't rendered, so highlight it to have it scrolled into view.
+        focusItem(index, event.nativeEvent);
+      }
+    },
+    onBlur(event) {
+      if (contains(event.currentTarget, event.relatedTarget)) {
+        return;
+      }
+      store.context.pendingFocusIndexRef.current = null;
+      pendingSelectRef.current = null;
+      tabStopScanRef.current?.();
+      tabStopScanRef.current = null;
+      typeahead.endSession();
+      if (event.target === event.currentTarget) {
+        // Focus left while the list held it for an item that isn't rendered.
+        store.unhighlightItem(event.nativeEvent);
+      }
+      store.setActiveIndex(getTabStopIndex(), event.nativeEvent);
+    },
+    onMouseLeave(event) {
+      store.hoverItem(null, event.nativeEvent);
+    },
+    onPointerDown() {
+      // A new pointer press starts a new Shift+Arrow range from wherever focus lands.
+      shiftAnchorRef.current = null;
+      cancelPendingSelection();
+    },
+    onKeyDownCapture(event: React.KeyboardEvent) {
+      // A selection still being resolved is replaced by whatever this key does.
+      cancelPendingSelection();
+      // Typeahead runs before the items' handlers, so a typed key doesn't reach the item it moved
+      // focus away from, and Space continues a search in progress instead of selecting.
+      if (event.key === ' ') {
+        if (typingRef.current) {
+          typeahead.onKeyDown(event);
+        }
+        return;
+      }
+      if (
+        !disabled &&
+        event.key.length === 1 &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        stopEvent(event);
+        typingRef.current = true;
+        // The keyboard takes over from the pointer.
+        if (store.state.hoveredIndex !== null) {
+          store.hoverItem(null, event.nativeEvent);
+        }
+      }
+      typeahead.onKeyDown(event);
+      if (typingRef.current) {
+        // Labels after the highlight are read ahead between keystrokes.
+        collection.readAhead.start((store.state.activeIndex ?? -1) + 1);
+      }
+    },
+    onKeyDown(event: React.KeyboardEvent) {
+      if (disabled) {
+        return;
+      }
+
+      if (event.key === 'Shift') {
+        shiftAnchorRef.current = store.state.activeIndex;
+      } else if (!event.shiftKey) {
+        shiftAnchorRef.current = null;
+      }
+
+      // Let composite handle unmodified arrow keys, Home, End
+      keyDownEventRef.current = event.nativeEvent;
+      if (itemCount != null) {
+        handleVirtualizedNavigation(event);
+      } else {
+        composite.props.onKeyDown?.(event);
+      }
+      keyDownEventRef.current = undefined;
+
+      // Escape: deselect all items (multi-select modes only)
+      if (event.key === 'Escape' && multiple) {
+        const currentValue = store.state.value;
+        if (Array.isArray(currentValue) && currentValue.length > 0) {
+          dispatchSelection(
+            { type: 'clear' },
+            createChangeEventDetails(REASONS.escapeKey, event.nativeEvent),
+          );
+        }
+      }
+
+      // Selection keyboard shortcuts (multiple selection only)
+      handleSelectionKeyDown(event);
+
+      // The keyboard takes over from the pointer, so the highlight returns to the focused item
+      // until the pointer moves again.
+      if (store.state.hoveredIndex !== null) {
+        store.hoverItem(null, event.nativeEvent);
+      }
+    },
+  };
+
+  // While no item has focus, keep the tab stop on the first selected item, including when the
+  // selection or the items change.
+  const value = store.useState('value');
+  const onMapChange = useStableCallback((map: Parameters<typeof composite.onMapChange>[0]) => {
+    // With `items`, positions come from the items, so they don't shift as items render.
+    if (store.state.items != null) {
+      if (store.state.activeIndex === null) {
+        store.setActiveIndex(getTabStopIndex());
+      }
+      return;
+    }
+    composite.onMapChange(map);
+    if (!store.state.itemFocused) {
+      store.setActiveIndex(getTabStopIndex());
+      return;
+    }
+    // Items can move around the focused item, such as when reordering them, so the tab stop
+    // follows the focused item to its new index.
+    const focusedElement = activeElement(ownerDocument(store.state.listElement));
+    const focusedIndex = composite.elementsRef.current.findIndex(
+      (element) => element != null && element === focusedElement,
+    );
+    if (focusedIndex !== -1) {
+      store.setActiveIndex(focusedIndex);
+    }
+  });
+  useIsoLayoutEffect(() => {
+    if (!store.state.itemFocused) {
+      store.setActiveIndex(getTabStopIndex());
+    }
+  }, [value, store, getTabStopIndex]);
+
+  // With `items`, the children render one item, or one group when the items are grouped. Only the
+  // groups with items in `range` render.
+  let content: React.ReactNode;
+  if (typeof children === 'function') {
+    if (itemGroups && groupInfos) {
+      content = groupInfos
+        .filter(
+          (info) =>
+            !range || (info.offset <= range.end && info.offset + info.size - 1 >= range.start),
+        )
+        .map((info) => (
+          <ListboxListGroupContext.Provider key={info.index} value={info}>
+            {children(itemGroups[info.index], info.index)}
+          </ListboxListGroupContext.Provider>
+        ));
+    } else {
+      content = <ListboxCollectionPart>{children}</ListboxCollectionPart>;
+    }
+  } else {
+    content = children;
+  }
+
+  const element = useRenderElement('div', componentProps, {
+    ref: [forwardedRef, setListElement, composite.props.ref],
+    state,
+    props: [defaultProps, elementProps, { children: content }],
+  });
+
+  // Use composite's elementsRef for the CompositeList so that keyboard navigation
+  // and item registration share the same ref.
+  return (
+    <CollectionProvider collection={collection}>
+      <CompositeList elementsRef={composite.elementsRef} onMapChange={onMapChange}>
+        {element}
+      </CompositeList>
+    </CollectionProvider>
+  );
+});
+
+export interface ListboxListState {
+  /**
+   * Whether the listbox is disabled.
+   */
+  disabled: boolean;
+  /**
+   * The orientation of the listbox.
+   */
+  orientation: 'vertical' | 'horizontal';
+}
+
+export interface ListboxListProps extends Omit<
+  BaseUIComponentProps<'div', ListboxListState>,
+  'children'
+> {
+  /**
+   * The items. With `items` on `Listbox.Root`, a function that renders one item, called with
+   * the item and its index, or one group when the items are grouped.
+   */
+  children?: React.ReactNode | ((item: any, index: number) => React.ReactNode);
+}
+
+export namespace ListboxList {
+  export type Props = ListboxListProps;
+  export type State = ListboxListState;
+}

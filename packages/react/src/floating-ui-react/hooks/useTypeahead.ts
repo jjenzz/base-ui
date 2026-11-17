@@ -1,22 +1,33 @@
 'use client';
 import * as React from 'react';
-import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { useStableCallback } from '@base-ui/utils/useStableCallback';
 import { useTimeout } from '@base-ui/utils/useTimeout';
 import { EMPTY_ARRAY } from '@base-ui/utils/empty';
 import { isElementVisible, isListIndexDisabled } from '../utils/composite';
 import type { DisabledIndices } from '../utils/composite';
-import type { ElementProps, FloatingRootContext } from '../types';
-import { contains } from '../utils/element';
 import { stopEvent } from '../utils/event';
 
 export interface UseTypeaheadProps {
   /**
    * A ref which contains an array of strings whose indices match the HTML
-   * elements of the list.
-   * @default empty list
+   * elements of the list. Use `getLabel` and `getCount` instead when the labels are read one at a
+   * time, such as from items that aren't rendered.
    */
-  listRef: React.RefObject<Array<string | null>>;
+  listRef?: React.RefObject<Array<string | null>> | undefined;
+  /**
+   * Returns the label of the item at an index. Used with `getCount` instead of `listRef`. With
+   * `readLabels`, `undefined` means the label isn't known yet.
+   */
+  getLabel?: ((index: number) => string | null | undefined) | undefined;
+  /**
+   * Reads labels that aren't known yet, from `from` onwards, then calls `done`. A search that
+   * reaches a label `getLabel` doesn't know yet waits for it, then carries on.
+   */
+  readLabels?: ((from: number, done: () => void) => void) | undefined;
+  /**
+   * Returns how many items there are. Used with `getLabel` instead of `listRef`.
+   */
+  getCount?: (() => number) | undefined;
   /**
    * The index of the active (focused or highlighted) item in the list.
    * @default null
@@ -64,14 +75,32 @@ export interface UseTypeaheadProps {
   selectedIndex?: number | null | undefined;
 }
 
+export interface UseTypeaheadReturnValue {
+  /**
+   * Handles a key press, matching the typed string against the list.
+   */
+  onKeyDown: (event: React.KeyboardEvent) => void;
+  /**
+   * Ends the typing session, so the next key press starts a new search from the active item.
+   */
+  endSession: () => void;
+  /**
+   * Ends the typing session and forgets the last match.
+   */
+  reset: () => void;
+}
+
 /**
- * Provides a matching callback that can be used to focus an item as the user
- * types, often used in tandem with `useListNavigation()`.
- * @see https://floating-ui.com/docs/useTypeahead
+ * Matches items as the user types. Keys typed in quick succession build one search, which
+ * starts from the item after the active one and resets after a pause. Typing the same letter
+ * again cycles through the items that start with it.
  */
-export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProps): ElementProps {
+export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue {
   const {
     listRef,
+    getLabel: getLabelProp,
+    getCount: getCountProp,
+    readLabels,
     elementsRef,
     activeIndex,
     onMatch: onMatchProp,
@@ -83,14 +112,22 @@ export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProp
   } = props;
 
   const onTyping = useStableCallback(onTypingProp);
-  const open = store.useState('open');
 
   const timeout = useTimeout();
   const stringRef = React.useRef('');
   const prevIndexRef = React.useRef<number | null>(selectedIndex ?? activeIndex ?? -1);
   const matchIndexRef = React.useRef<number | null>(null);
+  // Whether the typed string matched an item, so the next key knows whether a session is going
+  // on without searching for it again.
+  const matchedRef = React.useRef(false);
+  // Changes with each key, so a search waiting for labels knows a later key replaced it.
+  const searchRef = React.useRef(0);
 
   const onKeyDown = useStableCallback((event: React.KeyboardEvent) => {
+    if (!enabled) {
+      return;
+    }
+
     function getElement(index: number) {
       return elementsRef?.current[index];
     }
@@ -108,17 +145,28 @@ export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProp
       return disabledIndices == null || !isListIndexDisabled(EMPTY_ARRAY, index, disabledIndices);
     }
 
-    function getMatchingIndex(list: Array<string | null>, string: string, startIndex = 0) {
-      if (list.length === 0) {
+    // Labels are read one at a time, so a match near the active item doesn't read the rest.
+    const getCount = () => getCountProp?.() ?? listRef?.current?.length ?? 0;
+    const getLabel = (index: number) =>
+      getLabelProp ? getLabelProp(index) : (listRef?.current?.[index] ?? null);
+
+    // The first available item from `startIndex` whose label starts with `string`, `-1` when
+    // there's none, or the position of the first label that has to be read before it can tell.
+    function getMatchingIndex(string: string, startIndex = 0): number | { unread: number } {
+      const count = getCount();
+      if (count === 0) {
         return -1;
       }
 
-      const normalizedStartIndex = ((startIndex % list.length) + list.length) % list.length;
+      const normalizedStartIndex = ((startIndex % count) + count) % count;
       const lowerString = string.toLowerCase();
 
-      for (let offset = 0; offset < list.length; offset += 1) {
-        const index = (normalizedStartIndex + offset) % list.length;
-        const text = list[index];
+      for (let offset = 0; offset < count; offset += 1) {
+        const index = (normalizedStartIndex + offset) % count;
+        const text = getLabel(index);
+        if (text === undefined && readLabels) {
+          return { unread: index };
+        }
         if (!text?.toLowerCase().startsWith(lowerString) || !isItemAvailable(index)) {
           continue;
         }
@@ -127,8 +175,6 @@ export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProp
       return -1;
     }
 
-    const listContent = listRef.current;
-
     if (stringRef.current.length > 0 && event.key === ' ') {
       // Space should continue the in-progress typeahead session.
       stopEvent(event);
@@ -136,13 +182,13 @@ export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProp
     }
 
     if (stringRef.current.length > 0 && stringRef.current[0] !== ' ') {
-      if (getMatchingIndex(listContent, stringRef.current) === -1 && event.key !== ' ') {
+      if (!matchedRef.current && event.key !== ' ') {
         onTyping?.(false);
       }
     }
 
     if (
-      listContent == null ||
+      (!getLabelProp && listRef?.current == null) ||
       // Character key.
       event.key.length !== 1 ||
       // Modifier key.
@@ -151,11 +197,6 @@ export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProp
       event.altKey
     ) {
       return;
-    }
-
-    if (open && event.key !== ' ') {
-      stopEvent(event);
-      onTyping?.(true);
     }
 
     // Capture whether this is a new typing session before mutating the string.
@@ -168,20 +209,32 @@ export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProp
     // allow it in this case, too. Unavailable items are skipped while matching, so
     // they must be ignored here as well — otherwise a hidden or disabled double-letter
     // label would block rapid cycling through the available items.
-    const allowRapidSuccessionOfFirstLetter = listContent.every((text, index) =>
-      text && isItemAvailable(index) ? text[0]?.toLowerCase() !== text[1]?.toLowerCase() : true,
-    );
+    // Only checked when the same letter is typed again, so the other keys don't read every label.
+    const allowRapidSuccessionOfFirstLetter = () => {
+      const count = getCount();
+      for (let index = 0; index < count; index += 1) {
+        const text = getLabel(index);
+        if (text && isItemAvailable(index) && text[0]?.toLowerCase() === text[1]?.toLowerCase()) {
+          return false;
+        }
+      }
+      return true;
+    };
 
     // Allows the user to cycle through items that start with the same letter
     // in rapid succession.
-    if (allowRapidSuccessionOfFirstLetter && stringRef.current === event.key) {
+    let cycling = false;
+    if (stringRef.current === event.key && allowRapidSuccessionOfFirstLetter()) {
       stringRef.current = '';
       prevIndexRef.current = matchIndexRef.current;
+      cycling = true;
     }
 
+    const previousMatch = isNewSession || cycling ? null : matchIndexRef.current;
     stringRef.current += event.key;
     timeout.start(resetMs, () => {
       stringRef.current = '';
+      matchedRef.current = false;
       prevIndexRef.current = matchIndexRef.current;
       onTyping?.(false);
     });
@@ -192,54 +245,69 @@ export function useTypeahead(store: FloatingRootContext, props: UseTypeaheadProp
     const prevIndex = isNewSession ? (selectedIndex ?? activeIndex ?? -1) : prevIndexRef.current;
     const startIndex = (prevIndex ?? 0) + 1;
 
-    const index = getMatchingIndex(listContent, stringRef.current, startIndex);
+    const string = stringRef.current;
+    searchRef.current += 1;
+    const search = searchRef.current;
 
-    if (index !== -1) {
-      onMatchProp?.(index, event);
-      matchIndexRef.current = index;
-    } else if (event.key !== ' ') {
-      stringRef.current = '';
-      onTyping?.(false);
-    }
-  });
+    const finishSearch = (index: number) => {
+      matchedRef.current = index !== -1;
+      if (index !== -1) {
+        onMatchProp?.(index, event);
+        matchIndexRef.current = index;
+      } else if (event.key !== ' ') {
+        stringRef.current = '';
+        onTyping?.(false);
+      }
+    };
 
-  const onBlur = useStableCallback((event: React.FocusEvent) => {
-    const next = event.relatedTarget as Element | null;
-    const currentDomReferenceElement = store.select('domReferenceElement');
-    const currentFloatingElement = store.select('floatingElement');
-    const withinComposite =
-      contains(currentDomReferenceElement, next) || contains(currentFloatingElement, next);
-
-    // Keep the session if focus moves within the composite (reference <-> floating).
-    if (withinComposite) {
+    // The previous match was the first item from the same start to match the shorter string, so
+    // while it still matches, it's also the first to match the longer one.
+    const previousLabel = previousMatch == null ? null : getLabel(previousMatch);
+    if (
+      previousMatch != null &&
+      previousLabel?.toLowerCase().startsWith(string.toLowerCase()) &&
+      isItemAvailable(previousMatch)
+    ) {
+      finishSearch(previousMatch);
       return;
     }
 
-    // End the current typing session when focus leaves the composite entirely.
+    const attempt = () => {
+      if (search !== searchRef.current) {
+        return;
+      }
+      const result = getMatchingIndex(string, startIndex);
+      if (typeof result === 'number') {
+        finishSearch(result);
+        return;
+      }
+      // The session carries on while the search waits for labels.
+      matchedRef.current = true;
+      readLabels?.(result.unread, attempt);
+    };
+    attempt();
+  });
+
+  const endSession = useStableCallback(() => {
     timeout.clear();
+    searchRef.current += 1;
     stringRef.current = '';
+    matchedRef.current = false;
     prevIndexRef.current = matchIndexRef.current;
     onTyping?.(false);
   });
 
-  useIsoLayoutEffect(() => {
-    if (!open && selectedIndex !== null) {
-      return;
-    }
-
+  const reset = useStableCallback(() => {
     timeout.clear();
+    searchRef.current += 1;
     matchIndexRef.current = null;
+    matchedRef.current = false;
 
     if (stringRef.current !== '') {
       stringRef.current = '';
       onTyping?.(false);
     }
-  }, [open, selectedIndex, timeout, onTyping]);
+  });
 
-  const sharedProps = React.useMemo(() => ({ onKeyDown, onBlur }), [onKeyDown, onBlur]);
-
-  return React.useMemo(
-    () => (enabled ? { reference: sharedProps, floating: sharedProps } : {}),
-    [enabled, sharedProps],
-  );
+  return React.useMemo(() => ({ onKeyDown, endSession, reset }), [onKeyDown, endSession, reset]);
 }
