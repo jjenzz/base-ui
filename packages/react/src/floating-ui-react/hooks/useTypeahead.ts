@@ -110,6 +110,9 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
   const stringRef = React.useRef('');
   const prevIndexRef = React.useRef<number | null>(selectedIndex ?? activeIndex ?? -1);
   const matchIndexRef = React.useRef<number | null>(null);
+  // Whether the typed string matched an item, so the next key knows whether a session is going
+  // on without searching for it again.
+  const matchedRef = React.useRef(false);
 
   const onKeyDown = useStableCallback((event: React.KeyboardEvent) => {
     if (!enabled) {
@@ -165,7 +168,7 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
     }
 
     if (stringRef.current.length > 0 && stringRef.current[0] !== ' ') {
-      if (getMatchingIndex(stringRef.current) === -1 && event.key !== ' ') {
+      if (!matchedRef.current && event.key !== ' ') {
         onTyping?.(false);
       }
     }
@@ -206,14 +209,18 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
 
     // Allows the user to cycle through items that start with the same letter
     // in rapid succession.
+    let cycling = false;
     if (stringRef.current === event.key && allowRapidSuccessionOfFirstLetter()) {
       stringRef.current = '';
       prevIndexRef.current = matchIndexRef.current;
+      cycling = true;
     }
 
+    const previousMatch = isNewSession || cycling ? null : matchIndexRef.current;
     stringRef.current += event.key;
     timeout.start(resetMs, () => {
       stringRef.current = '';
+      matchedRef.current = false;
       prevIndexRef.current = matchIndexRef.current;
       onTyping?.(false);
     });
@@ -224,8 +231,17 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
     const prevIndex = isNewSession ? (selectedIndex ?? activeIndex ?? -1) : prevIndexRef.current;
     const startIndex = (prevIndex ?? 0) + 1;
 
-    const index = getMatchingIndex(stringRef.current, startIndex);
+    // The previous match was the first item from the same start to match the shorter string, so
+    // while it still matches, it's also the first to match the longer one.
+    const previousLabel = previousMatch == null ? null : getLabel(previousMatch);
+    const index =
+      previousMatch != null &&
+      previousLabel?.toLowerCase().startsWith(stringRef.current.toLowerCase()) &&
+      isItemAvailable(previousMatch)
+        ? previousMatch
+        : getMatchingIndex(stringRef.current, startIndex);
 
+    matchedRef.current = index !== -1;
     if (index !== -1) {
       onMatchProp?.(index, event);
       matchIndexRef.current = index;
@@ -238,6 +254,7 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
   const endSession = useStableCallback(() => {
     timeout.clear();
     stringRef.current = '';
+    matchedRef.current = false;
     prevIndexRef.current = matchIndexRef.current;
     onTyping?.(false);
   });
@@ -245,6 +262,7 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
   const reset = useStableCallback(() => {
     timeout.clear();
     matchIndexRef.current = null;
+    matchedRef.current = false;
 
     if (stringRef.current !== '') {
       stringRef.current = '';
