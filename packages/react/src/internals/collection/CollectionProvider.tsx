@@ -9,17 +9,16 @@ import {
 } from './CollectionContext';
 import type { CollectionInternals, HiddenBatch } from './useCollection';
 
-const EMPTY_BATCH: HiddenBatch = { entries: [], text: false };
-
 /**
  * Renders the items whose data is being read into the detached fragment. It only renders the
- * elements it's given, when the collection asks it to, not when the list renders.
+ * batch it's given, when the collection asks it to, not when the list renders, and tells the
+ * collection once the batch has committed, while its items are mounted.
  */
 const CollectionHiddenRoot = React.memo(function CollectionHiddenRoot(props: {
   internals: CollectionInternals<any>;
 }) {
   const { internals } = props;
-  const [batch, setBatch] = React.useState(EMPTY_BATCH);
+  const [batch, setBatch] = React.useState<HiddenBatch | null>(null);
 
   useIsoLayoutEffect(() => {
     internals.controllerRef.current = setBatch;
@@ -28,16 +27,24 @@ const CollectionHiddenRoot = React.memo(function CollectionHiddenRoot(props: {
     };
   }, [internals]);
 
+  // Runs after the items' own layout effects, so each has registered its data.
+  useIsoLayoutEffect(() => {
+    if (batch) {
+      internals.committedRef.current?.(batch);
+    }
+  }, [internals, batch]);
+
+  const text = batch?.text ?? false;
   const hiddenContext = React.useMemo(
-    () => ({ registry: internals.hiddenRegistry, text: batch.text }),
-    [internals, batch.text],
+    () => ({ registry: internals.hiddenRegistry, text }),
+    [internals, text],
   );
 
   return (
     <CollectionHiddenContext.Provider value={hiddenContext}>
-      {batch.entries.map(({ index, element }) => (
+      {batch?.indexes.map((index) => (
         <CollectionItemIndexContext.Provider key={index} value={index}>
-          {element}
+          {batch.render(batch.items[index], index)}
         </CollectionItemIndexContext.Provider>
       ))}
     </CollectionHiddenContext.Provider>

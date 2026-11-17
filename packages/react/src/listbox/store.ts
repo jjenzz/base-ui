@@ -200,6 +200,10 @@ function createInitialContext(): Context {
       getLabel: () => null,
       getValue: () => undefined,
       isDisabled: () => false,
+      read: (_start, _end, _options, done) => {
+        done(() => undefined);
+        return () => {};
+      },
     },
     typingRef: { current: false },
     lastSelectedIndexRef: { current: null },

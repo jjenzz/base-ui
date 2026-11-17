@@ -39,13 +39,11 @@ export const ListboxItem = React.memo(
     const { disabled: rootDisabled } = useListboxConfigContext();
 
     // The element whose text is the label when there's no `label` and the text is nested: the
-    // rendered item, or a bare `<span>` in the hidden fragment. The last one is kept, so the label
-    // can still be read after a hidden item unmounts.
+    // rendered item, or a bare `<span>` in the hidden fragment. A hidden item's label is copied as
+    // a string while it's mounted, so nothing keeps the element once it unmounts.
     const textElementRef = React.useRef<HTMLElement | null>(null);
     const setTextElement = React.useCallback((element: HTMLElement | null) => {
-      if (element) {
-        textElementRef.current = element;
-      }
+      textElementRef.current = element;
     }, []);
     const plainLabel = label ?? (typeof children === 'string' ? children : null);
 

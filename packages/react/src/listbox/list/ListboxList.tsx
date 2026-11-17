@@ -29,8 +29,18 @@ import type { SelectionAction } from '../utils/selectionReducer';
 import { ListboxCollection as ListboxCollectionPart } from '../collection/ListboxCollection';
 import { ListboxListGroupContext } from '../collection/ListboxCollectionContext';
 import { useSelectionCommit } from './useSelectionCommit';
-import type { ListboxItemData, ListboxItemReader } from '../utils/itemData';
+import type { ListboxItemData, ListboxItemReader, ListboxItemSnapshot } from '../utils/itemData';
 import { CollectionProvider, useCollection } from '../../internals/collection';
+
+// Finding the first selected item reads this many items at a time.
+const TAB_STOP_SCAN_CHUNK = 250;
+// A typeahead search reads this many labels at a time from where it reaches an unread one.
+const TYPEAHEAD_READ_CHUNK = 100;
+
+// Keeps an item's value and disabled state and, when its text was read, its label as a string.
+function snapshotItem(data: ListboxItemData, text: boolean): ListboxItemSnapshot {
+  return { value: data.value, disabled: data.disabled, label: text ? data.getLabel() : undefined };
+}
 
 /**
  * A container for the listbox items.
@@ -38,6 +48,7 @@ import { CollectionProvider, useCollection } from '../../internals/collection';
  *
  * Documentation: [Base UI Listbox](https://base-ui.com/react/components/listbox)
  */
+
 export const ListboxList = React.forwardRef(function ListboxList(
   componentProps: ListboxList.Props,
   forwardedRef: React.ForwardedRef<HTMLDivElement>,
@@ -105,25 +116,27 @@ export const ListboxList = React.forwardRef(function ListboxList(
     }
     return template ? template(item, index - offset) : null;
   };
-  const collection = useCollection<unknown, ListboxItemData>({
+  const collection = useCollection<unknown, ListboxItemData, ListboxItemSnapshot>({
     items,
     render: renderWithTemplate,
     enabled: range != null,
+    snapshot: snapshotItem,
   });
 
   // Every part reads item data through the collection: rendered items from what they registered,
-  // and, with `range`, the rest by rendering them into the hidden fragment.
+  // and, with `range`, the rest from what was read by rendering them into the hidden fragment.
   const itemReader = useRefWithInit((): ListboxItemReader => ({
     count: collection.count,
-    getLabel: (index) => collection.get(index, { text: true })?.getLabel() ?? null,
-    getValue: (index) => collection.get(index)?.value,
-    isDisabled: (index) => collection.get(index)?.disabled ?? false,
+    getLabel: (index) => collection.peek(index, { text: true })?.label,
+    getValue: (index) => collection.peek(index)?.value,
+    isDisabled: (index) => collection.peek(index)?.disabled ?? false,
+    read: collection.read,
   })).current;
   useIsoLayoutEffect(() => {
     store.context.itemReader = itemReader;
   }, [store, itemReader]);
 
-  const { commitSelection, cancelPendingSelection } = useSelectionCommit({ store, collection });
+  const { commitSelection, cancelPendingSelection } = useSelectionCommit({ store });
 
   /**
    * Commits a selection action and moves the anchor for Shift+Click ranges.
@@ -182,30 +195,64 @@ export const ListboxList = React.forwardRef(function ListboxList(
    * The item that should receive focus when the list receives focus: the first selected item,
    * or the first item when nothing is selected, as the APG listbox pattern describes.
    */
-  const getTabStopIndex = useStableCallback((scan = false): number | null => {
+  const isSelectedValue = (itemValue: unknown) => {
     const { value: selectedValues, isItemEqualToValue } = store.state;
-    if (selectedValues.length === 0) {
+    return (
+      itemValue !== undefined &&
+      selectedValues.some((selectedValue) =>
+        compareItemEquality(itemValue, selectedValue, isItemEqualToValue),
+      )
+    );
+  };
+
+  const getTabStopIndex = useStableCallback((): number | null => {
+    if (store.state.value.length === 0) {
       return 0;
     }
-    // With `range`, finding the first selected item reads the values of items that aren't
-    // rendered, which only happens in event handlers. Elsewhere, the list holds the tab stop and
-    // finds the item when it receives focus.
-    if (store.state.range != null && !scan) {
+    // With `range`, finding the first selected item can mean reading items that aren't rendered,
+    // so the list holds the tab stop and finds the item when it receives focus.
+    if (store.state.range != null) {
       return null;
     }
     const count = itemReader.count();
     for (let index = 0; index < count; index += 1) {
-      const itemValue = itemReader.getValue(index);
-      if (
-        itemValue !== undefined &&
-        selectedValues.some((selectedValue) =>
-          compareItemEquality(itemValue, selectedValue, isItemEqualToValue),
-        )
-      ) {
+      if (isSelectedValue(itemReader.getValue(index))) {
         return index;
       }
     }
     return 0;
+  });
+
+  // With `range`, finds the first selected item by reading the items in order, a chunk at a time,
+  // then calls `done` with it, or with the first item when none is selected.
+  const tabStopScanRef = React.useRef<(() => void) | null>(null);
+  const findTabStop = useStableCallback((done: (index: number) => void) => {
+    tabStopScanRef.current?.();
+    const count = itemReader.count();
+    const scanFrom = (start: number) => {
+      const end = Math.min(count, start + TAB_STOP_SCAN_CHUNK) - 1;
+      tabStopScanRef.current = itemReader.read(
+        start,
+        end,
+        { urgent: true, chunkSize: TAB_STOP_SCAN_CHUNK },
+        (lookup) => {
+          for (let index = start; index <= end; index += 1) {
+            if (isSelectedValue(lookup(index)?.value)) {
+              tabStopScanRef.current = null;
+              done(index);
+              return;
+            }
+          }
+          if (end + 1 < count) {
+            scanFrom(end + 1);
+          } else {
+            tabStopScanRef.current = null;
+            done(0);
+          }
+        },
+      );
+    };
+    scanFrom(0);
   });
 
   const composite = useCompositeRoot({
@@ -312,12 +359,28 @@ export const ListboxList = React.forwardRef(function ListboxList(
     }
   });
 
+  const typeaheadReadRef = React.useRef<(() => void) | null>(null);
+
   // Typeahead, like Select and Menu: keys typed in quick succession build one search, which resets
   // after a pause, and typing the same letter again cycles through the items that start with it.
   const typeahead = useTypeahead({
-    // Labels are read one at a time, so a match near the highlight reads only a few.
+    // Labels that aren't known are read in chunks from where the search reaches them, so a match
+    // near the highlight reads only a few.
     getLabel: itemReader.getLabel,
     getCount: itemReader.count,
+    readLabels(from, done) {
+      // A later key replaces the search, so what an earlier one was reading isn't needed.
+      typeaheadReadRef.current?.();
+      typeaheadReadRef.current = itemReader.read(
+        from,
+        from + TYPEAHEAD_READ_CHUNK - 1,
+        { text: true, urgent: true },
+        () => {
+          typeaheadReadRef.current = null;
+          done();
+        },
+      );
+    },
     elementsRef: composite.elementsRef,
     activeIndex,
     enabled: !disabled,
@@ -489,7 +552,15 @@ export const ListboxList = React.forwardRef(function ListboxList(
       }
       // The list isn't a tab stop, but it can receive focus programmatically, such as from a
       // `Listbox.Label` click. Pass focus on to the item that holds the tab stop.
-      const index = store.state.activeIndex ?? getTabStopIndex(true) ?? 0;
+      const tabStop = store.state.activeIndex ?? getTabStopIndex();
+      if (tabStop == null) {
+        // With `range`, the first selected item may not be known yet, so the list holds focus
+        // until it's found.
+        const { nativeEvent } = event;
+        findTabStop((found) => focusItem(found, nativeEvent));
+        return;
+      }
+      const index = tabStop;
       if (elements[index]) {
         elements[index].focus();
       } else if (itemCount != null && itemCount > 0) {
@@ -503,6 +574,8 @@ export const ListboxList = React.forwardRef(function ListboxList(
       }
       store.context.pendingFocusIndexRef.current = null;
       pendingSelectRef.current = null;
+      tabStopScanRef.current?.();
+      tabStopScanRef.current = null;
       typeahead.endSession();
       if (event.target === event.currentTarget) {
         // Focus left while the list held it for an item that isn't rendered.

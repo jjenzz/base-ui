@@ -15,9 +15,15 @@ export interface UseTypeaheadProps {
    */
   listRef?: React.RefObject<Array<string | null>> | undefined;
   /**
-   * Returns the label of the item at an index. Used with `getCount` instead of `listRef`.
+   * Returns the label of the item at an index. Used with `getCount` instead of `listRef`. With
+   * `readLabels`, `undefined` means the label isn't known yet.
    */
-  getLabel?: ((index: number) => string | null) | undefined;
+  getLabel?: ((index: number) => string | null | undefined) | undefined;
+  /**
+   * Reads labels that aren't known yet, from `from` onwards, then calls `done`. A search that
+   * reaches a label `getLabel` doesn't know yet waits for it, then carries on.
+   */
+  readLabels?: ((from: number, done: () => void) => void) | undefined;
   /**
    * Returns how many items there are. Used with `getLabel` instead of `listRef`.
    */
@@ -94,6 +100,7 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
     listRef,
     getLabel: getLabelProp,
     getCount: getCountProp,
+    readLabels,
     elementsRef,
     activeIndex,
     onMatch: onMatchProp,
@@ -113,6 +120,8 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
   // Whether the typed string matched an item, so the next key knows whether a session is going
   // on without searching for it again.
   const matchedRef = React.useRef(false);
+  // Changes with each key, so a search waiting for labels knows a later key replaced it.
+  const searchRef = React.useRef(0);
 
   const onKeyDown = useStableCallback((event: React.KeyboardEvent) => {
     if (!enabled) {
@@ -141,7 +150,9 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
     const getLabel = (index: number) =>
       getLabelProp ? getLabelProp(index) : (listRef?.current?.[index] ?? null);
 
-    function getMatchingIndex(string: string, startIndex = 0) {
+    // The first available item from `startIndex` whose label starts with `string`, `-1` when
+    // there's none, or the position of the first label that has to be read before it can tell.
+    function getMatchingIndex(string: string, startIndex = 0): number | { unread: number } {
       const count = getCount();
       if (count === 0) {
         return -1;
@@ -153,6 +164,9 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
       for (let offset = 0; offset < count; offset += 1) {
         const index = (normalizedStartIndex + offset) % count;
         const text = getLabel(index);
+        if (text === undefined && readLabels) {
+          return { unread: index };
+        }
         if (!text?.toLowerCase().startsWith(lowerString) || !isItemAvailable(index)) {
           continue;
         }
@@ -231,28 +245,52 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
     const prevIndex = isNewSession ? (selectedIndex ?? activeIndex ?? -1) : prevIndexRef.current;
     const startIndex = (prevIndex ?? 0) + 1;
 
+    const string = stringRef.current;
+    searchRef.current += 1;
+    const search = searchRef.current;
+
+    const finishSearch = (index: number) => {
+      matchedRef.current = index !== -1;
+      if (index !== -1) {
+        onMatchProp?.(index, event);
+        matchIndexRef.current = index;
+      } else if (event.key !== ' ') {
+        stringRef.current = '';
+        onTyping?.(false);
+      }
+    };
+
     // The previous match was the first item from the same start to match the shorter string, so
     // while it still matches, it's also the first to match the longer one.
     const previousLabel = previousMatch == null ? null : getLabel(previousMatch);
-    const index =
+    if (
       previousMatch != null &&
-      previousLabel?.toLowerCase().startsWith(stringRef.current.toLowerCase()) &&
+      previousLabel?.toLowerCase().startsWith(string.toLowerCase()) &&
       isItemAvailable(previousMatch)
-        ? previousMatch
-        : getMatchingIndex(stringRef.current, startIndex);
-
-    matchedRef.current = index !== -1;
-    if (index !== -1) {
-      onMatchProp?.(index, event);
-      matchIndexRef.current = index;
-    } else if (event.key !== ' ') {
-      stringRef.current = '';
-      onTyping?.(false);
+    ) {
+      finishSearch(previousMatch);
+      return;
     }
+
+    const attempt = () => {
+      if (search !== searchRef.current) {
+        return;
+      }
+      const result = getMatchingIndex(string, startIndex);
+      if (typeof result === 'number') {
+        finishSearch(result);
+        return;
+      }
+      // The session carries on while the search waits for labels.
+      matchedRef.current = true;
+      readLabels?.(result.unread, attempt);
+    };
+    attempt();
   });
 
   const endSession = useStableCallback(() => {
     timeout.clear();
+    searchRef.current += 1;
     stringRef.current = '';
     matchedRef.current = false;
     prevIndexRef.current = matchIndexRef.current;
@@ -261,6 +299,7 @@ export function useTypeahead(props: UseTypeaheadProps): UseTypeaheadReturnValue 
 
   const reset = useStableCallback(() => {
     timeout.clear();
+    searchRef.current += 1;
     matchIndexRef.current = null;
     matchedRef.current = false;
 
