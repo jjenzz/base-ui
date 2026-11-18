@@ -1,0 +1,159 @@
+.Page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 40rem;
+  padding: 2rem;
+}
+
+.Intro {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.Demo {
+  display: flex;
+  justify-content: center;
+  padding: 3rem 1rem;
+  border: 1px dashed oklch(87% 0 0deg);
+}
+
+.Field {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.25rem;
+  width: 100%;
+  max-width: 20em;
+}
+
+.Label {
+  font-size: 1em;
+  font-weight: 700;
+}
+
+.InputGroup {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 2.25em;
+  border: 1px solid oklch(14.5% 0 0deg);
+  background-color: white;
+  color: oklch(14.5% 0 0deg);
+
+  &:has(.Input:focus-visible) {
+    outline: 2px solid oklch(14.5% 0 0deg);
+    outline-offset: -1px;
+  }
+}
+
+.Input {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0 0.5em;
+  border: none;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 1em;
+  background-color: transparent;
+  color: inherit;
+
+  &:focus {
+    outline: none;
+  }
+
+  &::placeholder {
+    color: oklch(55.6% 0 0deg);
+  }
+
+  &::-ms-reveal {
+    display: none;
+  }
+}
+
+.Toggle {
+  box-sizing: border-box;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  height: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  background-color: transparent;
+  color: inherit;
+
+  &:hover {
+    background-color: oklch(97% 0 0deg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid oklch(14.5% 0 0deg);
+    outline-offset: -1px;
+  }
+}
+
+.Icon {
+  grid-area: 1 / 1;
+  display: block;
+}
+
+.Error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: oklch(57.7% 0.245 27.325deg);
+}
+
+.Meta {
+  margin: 0;
+  font-size: 0.75rem;
+  color: oklch(55.6% 0 0deg);
+}
+
+.Controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid oklch(87% 0 0deg);
+}
+
+.Presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.Preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid oklch(14.5% 0 0deg);
+  background-color: white;
+  color: oklch(14.5% 0 0deg);
+  font: inherit;
+
+  &[aria-pressed='true'] {
+    background-color: oklch(14.5% 0 0deg);
+    color: white;
+  }
+}
+
+.Control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.TextArea,
+.TextInput {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}
