@@ -1,0 +1,165 @@
+.Tree {
+  width: 17rem;
+  padding: 0.25rem;
+  color: oklch(14.5% 0 0deg);
+  background: white;
+  border: 1px solid oklch(92.2% 0 0deg);
+
+  @media (prefers-color-scheme: dark) {
+    color: white;
+    border: 1px solid oklch(37.1% 0 0deg);
+    background: oklch(14.5% 0 0deg);
+  }
+}
+
+.Item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-block: 0.25rem;
+  padding-inline: calc(0.5rem + 1.25rem * (var(--tree-item-level) - 1)) 0.5rem;
+  border-inline-start: 2px solid transparent;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  outline: none;
+
+  @media (hover: hover) {
+    &:hover {
+      background: oklch(97% 0 0deg);
+
+      @media (prefers-color-scheme: dark) {
+        background: oklch(26.9% 0 0deg);
+      }
+    }
+  }
+
+  &[data-selected] {
+    background: oklch(92.2% 0 0deg);
+    border-inline-start-color: oklch(14.5% 0 0deg);
+
+    @media (prefers-color-scheme: dark) {
+      background: oklch(37.1% 0 0deg);
+      border-inline-start-color: white;
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid oklch(14.5% 0 0deg);
+    outline-offset: -1px;
+
+    @media (prefers-color-scheme: dark) {
+      outline: 2px solid white;
+    }
+  }
+
+  @media (forced-colors: active) {
+    border-inline-start-color: Canvas;
+
+    &[data-selected] {
+      border-inline-start-color: Highlight;
+    }
+  }
+}
+
+/*
+ * Connectors, with the same column for each level:
+ * 1rem + 1.25rem per level puts a line under the center of the parent's icon.
+ */
+
+/* The parent's line beside this item: a full line, or a corner on the last child */
+.Item:not([aria-level='1'])::before,
+.Item:not([aria-level='1'])::after {
+  content: '';
+  position: absolute;
+  left: calc(1rem + 1.25rem * (var(--tree-item-level) - 2));
+  pointer-events: none;
+  background: oklch(87% 0 0deg);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(43.9% 0 0deg);
+  }
+}
+
+.Item:not([aria-level='1'])::before {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.Item[data-last-child]::before {
+  bottom: 50%;
+}
+
+/* The branch from the parent's line to this item's icon */
+.Item:not([aria-level='1'])::after {
+  top: 50%;
+  width: 0.5rem;
+  height: 1px;
+}
+
+/* An open folder's line down to its first child */
+.OpenFolder::after {
+  content: '';
+  position: absolute;
+  top: calc(50% + 0.5rem);
+  bottom: 0;
+  left: calc(1rem + 1.25rem * (var(--tree-item-level) - 1));
+  width: 1px;
+  pointer-events: none;
+  background: oklch(87% 0 0deg);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(43.9% 0 0deg);
+  }
+}
+
+/* Ancestors' lines that continue past this item, from Tree.ItemIndentGuide */
+.IndentGuide {
+  display: contents;
+
+  & > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(1rem + 1.25rem * (var(--tree-indent-guide-level) - 2));
+    width: 1px;
+    pointer-events: none;
+    background: oklch(87% 0 0deg);
+
+    @media (prefers-color-scheme: dark) {
+      background: oklch(43.9% 0 0deg);
+    }
+  }
+
+  /* A line stops once its ancestor is the last child */
+  & > span:is([data-level='1'], [data-last]) {
+    display: none;
+  }
+}
+
+.Icon {
+  display: inline-flex;
+  color: oklch(55.6% 0 0deg);
+  flex-shrink: 0;
+
+  @media (prefers-color-scheme: dark) {
+    color: oklch(70.8% 0 0deg);
+  }
+
+  & svg {
+    width: 1rem;
+    height: 1rem;
+  }
+}
+
+.Label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}

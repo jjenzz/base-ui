@@ -87,6 +87,22 @@ import { DemoTreeFileDirectory } from './demos/file-directory';
 
 <DemoTreeFileDirectory />
 
+### Indent guides
+
+Use the `--tree-item-level` CSS variable to draw a guide line for each ancestor level, like a code editor's file explorer.
+
+import { DemoTreeIndentGuides } from './demos/indent-guides';
+
+<DemoTreeIndentGuides />
+
+### Indent guides with ItemIndentGuide
+
+Render `<Tree.ItemIndentGuide>` to draw connector lines. Each ancestor's line carries `data-last` when that ancestor is a last child, so the line can stop there.
+
+import { DemoTreeIndentGuidePart } from './demos/indent-guide-part';
+
+<DemoTreeIndentGuidePart />
+
 ### Checkbox items
 
 Render `<Tree.CheckboxItem>` with `multiple` to select items with checkboxes. `checkboxSelectionPropagation` selects a parent's descendants with it, and marks a partly selected parent `data-indeterminate` and `aria-checked="mixed"`.
