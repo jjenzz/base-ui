@@ -1,5 +1,5 @@
 import { expect, describe, it } from 'vitest';
-import { screen } from '@mui/internal-test-utils';
+import { flushMicrotasks, screen } from '@mui/internal-test-utils';
 import { Autocomplete } from '@base-ui/react/autocomplete';
 import { Field } from '@base-ui/react/field';
 import { createRenderer, describeConformance } from '#test-utils';
@@ -28,36 +28,76 @@ describe('<Autocomplete.Label />', () => {
       </Autocomplete.Root>,
     );
 
+    const label = screen.getByText('Fruit');
     const input = screen.getByRole('combobox', { name: 'Fruit' });
-    expect(screen.getByText('Fruit')).toHaveAttribute('for', input.id);
+    expect(label.tagName).toBe('LABEL');
+    expect(label).toHaveAttribute('for', input.id);
     expect(screen.getByRole('button', { name: 'Open popup' })).not.toHaveAttribute(
       'aria-labelledby',
     );
   });
 
-  it('associates with the input in server-rendered markup', () => {
-    renderToString(
+  it('points at the input in server-rendered markup and after hydration', async () => {
+    const { hydrate } = renderToString(
       <Autocomplete.Root>
         <Autocomplete.Label>Fruit</Autocomplete.Label>
         <Autocomplete.Input />
       </Autocomplete.Root>,
     );
 
-    const input = screen.getByRole('combobox');
-    expect(input.id).not.toBe('');
-    expect(screen.getByText('Fruit')).toHaveAttribute('for', input.id);
+    const serverId = screen.getByRole('combobox').id;
+    expect(serverId).not.toBe('');
+    expect(screen.getByText('Fruit')).toHaveAttribute('for', serverId);
+
+    hydrate();
+    await flushMicrotasks();
+
+    expect(screen.getByRole('combobox')).toHaveAttribute('id', serverId);
+    expect(screen.getByText('Fruit')).toHaveAttribute('for', serverId);
   });
 
-  it('follows a custom input id', async () => {
+  it('points at the id set on the Root', async () => {
     await render(
-      <Autocomplete.Root>
+      <Autocomplete.Root id="fruit">
         <Autocomplete.Label>Fruit</Autocomplete.Label>
-        <Autocomplete.Input id="custom-input" />
+        <Autocomplete.Input />
       </Autocomplete.Root>,
     );
 
+    expect(screen.getByText('Fruit')).toHaveAttribute('for', 'fruit');
+    expect(screen.getByRole('combobox', { name: 'Fruit' })).toHaveAttribute('id', 'fruit');
+  });
+
+  it('follows the id set on the Input as it changes', async () => {
+    const { setProps } = await render(<TestAutocomplete inputId="first" />);
+
+    expect(screen.getByText('Fruit')).toHaveAttribute('for', 'first');
+
+    await setProps({ inputId: 'second' });
+
+    expect(screen.getByRole('combobox', { name: 'Fruit' })).toHaveAttribute('id', 'second');
+    expect(screen.getByText('Fruit')).toHaveAttribute('for', 'second');
+
+    function TestAutocomplete(props: { inputId: string }) {
+      return (
+        <Autocomplete.Root>
+          <Autocomplete.Label>Fruit</Autocomplete.Label>
+          <Autocomplete.Input id={props.inputId} />
+        </Autocomplete.Root>
+      );
+    }
+  });
+
+  it('points at an id set on the Input render element', async () => {
+    await render(
+      <Autocomplete.Root id="fruit">
+        <Autocomplete.Label>Fruit</Autocomplete.Label>
+        <Autocomplete.Input render={<input id="custom-input" />} />
+      </Autocomplete.Root>,
+    );
+
+    expect(screen.getByRole('combobox')).toHaveAttribute('id', 'custom-input');
     expect(screen.getByText('Fruit')).toHaveAttribute('for', 'custom-input');
-    expect(screen.getByRole('combobox', { name: 'Fruit' })).toHaveAttribute('id', 'custom-input');
   });
 
   it('focuses the input when clicked', async () => {
@@ -76,8 +116,52 @@ describe('<Autocomplete.Label />', () => {
     expect(input).toHaveFocus();
   });
 
-  describe('Field', () => {
-    it('labels the field control and reflects field state', async () => {
+  describe('Field integration', () => {
+    it('labels the input with the id from Field.Root', async () => {
+      await render(
+        <Field.Root>
+          <Autocomplete.Root>
+            <Autocomplete.Label>Fruit</Autocomplete.Label>
+            <Autocomplete.Input />
+          </Autocomplete.Root>
+        </Field.Root>,
+      );
+
+      const label = screen.getByText('Fruit');
+      const input = screen.getByRole('combobox', { name: 'Fruit' });
+      expect(input.id).not.toBe('');
+      expect(label).toHaveAttribute('for', input.id);
+      expect(input).toHaveAttribute('aria-labelledby', label.id);
+    });
+
+    it('points at the id set on the Input', async () => {
+      await render(
+        <Field.Root>
+          <Autocomplete.Root>
+            <Autocomplete.Label>Fruit</Autocomplete.Label>
+            <Autocomplete.Input id="custom-input" />
+          </Autocomplete.Root>
+        </Field.Root>,
+      );
+
+      expect(screen.getByText('Fruit')).toHaveAttribute('for', 'custom-input');
+    });
+
+    it('registers an id set on its render element as the input label', async () => {
+      await render(
+        <Field.Root>
+          <Autocomplete.Root>
+            <Autocomplete.Label render={<label id="fruit-label" />}>Fruit</Autocomplete.Label>
+            <Autocomplete.Input />
+          </Autocomplete.Root>
+        </Field.Root>,
+      );
+
+      expect(screen.getByText('Fruit')).toHaveAttribute('id', 'fruit-label');
+      expect(screen.getByRole('combobox')).toHaveAttribute('aria-labelledby', 'fruit-label');
+    });
+
+    it('reflects the Field state', async () => {
       await render(
         <Field.Root invalid disabled>
           <Autocomplete.Root>
@@ -88,25 +172,8 @@ describe('<Autocomplete.Label />', () => {
       );
 
       const label = screen.getByText('Fruit');
-      const input = screen.getByRole('combobox', { name: 'Fruit' });
-      expect(label).toHaveAttribute('for', input.id);
-      expect(input).toHaveAttribute('aria-labelledby', label.id);
       expect(label).toHaveAttribute('data-invalid');
       expect(label).toHaveAttribute('data-disabled');
-    });
-
-    it('uses the root id as the field control id', async () => {
-      await render(
-        <Field.Root>
-          <Autocomplete.Root id="fruit">
-            <Autocomplete.Label>Fruit</Autocomplete.Label>
-            <Autocomplete.Input />
-          </Autocomplete.Root>
-        </Field.Root>,
-      );
-
-      expect(screen.getByText('Fruit')).toHaveAttribute('for', 'fruit');
-      expect(screen.getByRole('combobox', { name: 'Fruit' })).toHaveAttribute('id', 'fruit');
     });
   });
 });
