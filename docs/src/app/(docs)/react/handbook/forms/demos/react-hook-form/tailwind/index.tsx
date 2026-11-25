@@ -95,7 +95,7 @@ function ReactHookForm() {
           <Field.Root name={name} invalid={invalid} touched={isTouched} dirty={isDirty}>
             <Combobox.Root items={REGIONS} value={value} onValueChange={onChange}>
               <div className="relative text-sm leading-5 font-bold text-neutral-950 dark:text-white">
-                <Combobox.Label className="mb-1 block">Region</Combobox.Label>
+                <Field.Label className="mb-1 block">Region</Field.Label>
                 <Combobox.InputGroup>
                   <Combobox.Input placeholder="e.g. eu-central-1" ref={ref} onBlur={onBlur} />
                   <div className="absolute right-0 bottom-0 inline-flex h-full items-center justify-center text-neutral-500 dark:text-neutral-400">

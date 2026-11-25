@@ -6,15 +6,6 @@ export function Root(props: Combobox.Root.Props<any, any>) {
   return <Combobox.Root {...props} />;
 }
 
-export function Label({ className, ...props }: Combobox.Label.Props) {
-  return (
-    <Combobox.Label
-      className={clsx('text-sm font-bold text-neutral-950 dark:text-white', className)}
-      {...props}
-    />
-  );
-}
-
 export const Input = React.forwardRef<HTMLInputElement, Combobox.Input.Props>(function Input(
   { className, ...props }: Combobox.Input.Props,
   forwardedRef: React.ForwardedRef<HTMLInputElement>,

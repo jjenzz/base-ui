@@ -21,6 +21,7 @@ Use `<Field.Label>` or a native `<label>` to label the following controls:
 - `NumberField`
 - `OTPField`
 - `Autocomplete`
+- `Combobox`
 - `Checkbox`
 - `Radio`
 - `Switch`
@@ -40,9 +41,8 @@ import { Switch } from '@base-ui/react/switch';
 </Field.Root>;
 ```
 
-### Component labels
+### Trigger-based controls
 
-- `Combobox`: use `<Combobox.Label>`.
 - `Select`: use `<Select.Label>`.
 - `Slider`: use `<Slider.Label>`. For multi-thumb sliders, also add an `aria-label` on each
   `<Slider.Thumb>` to distinguish the thumbs.
@@ -179,10 +179,8 @@ import { Combobox } from '@base-ui/react/combobox';
   {/* @highlight-text "name" */}
   <Field.Root name="country">
     {/* @highlight-end */}
-    <Combobox.Root>
-      <Combobox.Label>Country of residence</Combobox.Label>
-      {/* ... */}
-    </Combobox.Root>
+    <Field.Label>Country of residence</Field.Label>
+    <Combobox.Root />
   </Field.Root>
 </Form>;
 ```
