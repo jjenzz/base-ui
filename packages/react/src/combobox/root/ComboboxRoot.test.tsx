@@ -13439,7 +13439,7 @@ describe('<Combobox.Root />', () => {
       expect(screen.getByTestId('input')).not.toHaveAttribute('aria-labelledby');
     });
 
-    it('updates Combobox.Label linkage when root id changes', async () => {
+    it('keeps Combobox.Label linkage when root id changes', async () => {
       const { setProps } = await render(
         <Combobox.Root id="first">
           <Combobox.Label data-testid="label">Food</Combobox.Label>
@@ -13459,10 +13459,9 @@ describe('<Combobox.Root />', () => {
       const trigger = screen.getByTestId('trigger');
 
       await waitFor(() => {
-        expect(trigger).toHaveAttribute('aria-labelledby', 'second-label');
+        expect(trigger).toHaveAttribute('aria-labelledby', screen.getByTestId('label').id);
       });
       expect(trigger).toHaveAttribute('id', 'second');
-      expect(screen.getByTestId('label')).toHaveAttribute('id', 'second-label');
     });
 
     it('Field.Description', async () => {

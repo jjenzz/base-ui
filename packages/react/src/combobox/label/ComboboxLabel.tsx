@@ -6,7 +6,7 @@ import type { FieldRoot } from '../../field/root/FieldRoot';
 import { useFieldRootContext } from '../../internals/field-root-context/FieldRootContext';
 import { fieldValidityMapping } from '../../internals/field-constants/constants';
 import { useLabel } from '../../internals/labelable-provider/useLabel';
-import { getDefaultLabelId } from '../../utils/resolveAriaLabelledBy';
+import { resolveRenderedId } from '../../internals/resolveRenderedId';
 import { useComboboxRootContext } from '../root/ComboboxRootContext';
 
 /**
@@ -19,10 +19,7 @@ export const ComboboxLabel = React.forwardRef(function ComboboxLabel(
   componentProps: ComboboxLabel.Props,
   forwardedRef: React.ForwardedRef<HTMLElement>,
 ) {
-  const { render, className, style, ...elementProps } = componentProps;
-  // Keep label id derived from the root and ignore runtime `id` overrides from untyped consumers.
-  const elementPropsWithoutId = elementProps as typeof elementProps & { id?: string | undefined };
-  delete elementPropsWithoutId.id;
+  const { render, className, style, id: idProp, ...elementProps } = componentProps;
 
   const fieldRootContext = useFieldRootContext();
   const store = useComboboxRootContext();
@@ -30,20 +27,25 @@ export const ComboboxLabel = React.forwardRef(function ComboboxLabel(
   const inputInsidePopup = store.useState('inputInsidePopup');
   const triggerElement = store.useState('triggerElement');
   const inputElement = store.useState('inputElement');
+  const renderedInputId = store.useState('renderedInputId');
   const rootId = store.useState('id');
-  const defaultLabelId = getDefaultLabelId(rootId);
 
   // The trigger is the form control only when the input is inside the popup. Until the parts
   // mount, assume the input is the control: the server can't tell the patterns apart, and the
   // input and the trigger both default to the root id.
   const triggerIsControl = inputInsidePopup && triggerElement != null;
 
+  // An inline input's default id isn't the root id, so it's read from the mounted input.
+  const inputId = (renderedInputId ?? inputElement?.id ?? rootId) || undefined;
+
+  // The label id is registered with Field and the trigger's `aria-labelledby`, so an id on the
+  // render element, which is the one rendered, is the one registered.
   const labelProps = useLabel({
-    id: defaultLabelId,
+    id: resolveRenderedId(componentProps, idProp),
     // A native label on the trigger button would forward hover and clicks to it, so the
     // trigger is labelled through `aria-labelledby` and focused on click instead.
     native: !triggerIsControl,
-    fallbackControlId: triggerIsControl ? triggerElement.id : (inputElement?.id ?? rootId),
+    fallbackControlId: triggerIsControl ? triggerElement.id : undefined,
     setLabelId(nextLabelId) {
       const resolvedLabelId =
         typeof nextLabelId === 'function' ? nextLabelId(store.state.labelId) : nextLabelId;
@@ -54,7 +56,8 @@ export const ComboboxLabel = React.forwardRef(function ComboboxLabel(
   return useRenderElement('label', componentProps, {
     ref: forwardedRef,
     state: fieldRootContext.state,
-    props: [labelProps, elementProps],
+    // `htmlFor` follows the id the input renders with, including one set on its render element.
+    props: [labelProps, elementProps, { htmlFor: triggerIsControl ? undefined : inputId }],
     stateAttributesMapping: fieldValidityMapping,
   });
 });
@@ -63,7 +66,7 @@ export interface ComboboxLabelState extends FieldRoot.State {}
 
 export interface ComboboxLabelProps extends Omit<
   BaseUIComponentProps<'label', ComboboxLabelState>,
-  'id'
+  'htmlFor'
 > {}
 
 export namespace ComboboxLabel {

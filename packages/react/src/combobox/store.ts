@@ -34,6 +34,11 @@ export type State = ValuePopupState & {
    */
   popupElementId: string | undefined;
   inputElement: HTMLInputElement | null;
+  /**
+   * The id `Combobox.Input` renders with when it differs from its default, such as one set on its
+   * render element.
+   */
+  renderedInputId: string | undefined;
   inputGroupElement: HTMLDivElement | null;
 
   inputInsidePopup: boolean;
@@ -143,6 +148,7 @@ export const selectors = {
 
   popupElementId: (state: State) => state.popupElementId,
   inputElement: (state: State) => state.inputElement,
+  renderedInputId: (state: State) => state.renderedInputId,
   inputGroupElement: (state: State) => state.inputGroupElement,
   // See `interactions`.
   interactionOpen: (state: State) => popupStoreSelectors.open(state) || state.inline,
