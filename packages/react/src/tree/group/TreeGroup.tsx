@@ -32,11 +32,25 @@ export const TreeGroup = fastComponentRef(function TreeGroup(
   const groupRef = React.useRef<HTMLDivElement | null>(null);
   const [height, setHeight] = React.useState<number | undefined>(undefined);
 
+  // Like Collapsible, the height is a pixel value only while a transition runs, so the
+  // transition has two lengths to interpolate between. Otherwise it is `auto`, so the group
+  // keeps following its content as nested groups expand and virtualized rows mount.
   useIsoLayoutEffect(() => {
-    if (mounted && groupRef.current) {
-      setHeight(groupRef.current.scrollHeight);
+    if (!mounted || !groupRef.current || (expanded && transitionStatus !== 'starting')) {
+      return;
     }
-  }, [mounted, expanded]);
+    setHeight(groupRef.current.scrollHeight);
+  }, [mounted, expanded, transitionStatus]);
+
+  useOpenChangeComplete({
+    // Wait for the enter transition, which runs once the starting style is removed.
+    enabled: expanded && height !== undefined && transitionStatus === undefined,
+    open: expanded,
+    ref: groupRef,
+    onComplete() {
+      setHeight(undefined);
+    },
+  });
 
   useOpenChangeComplete({
     // Wait only once the ending style is applied, so the wait sees the exit transition.
@@ -58,10 +72,9 @@ export const TreeGroup = fastComponentRef(function TreeGroup(
     ref: [forwardedRef, groupRef],
     props: [
       {
-        style:
-          height === undefined
-            ? undefined
-            : ({ '--tree-group-height': `${height}px` } as React.CSSProperties),
+        style: {
+          '--tree-group-height': height === undefined ? 'auto' : `${height}px`,
+        } as React.CSSProperties,
       },
       // A collapsing group leaves Tab and assistive technology at once, before it finishes.
       expanded ? undefined : { 'aria-hidden': true, inert: inertValue(true) },

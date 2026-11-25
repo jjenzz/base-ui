@@ -5,6 +5,9 @@
   height: 24rem;
   overflow: auto;
   overscroll-behavior: contain;
+  /* The virtualizer owns the scroll position. Scroll anchoring would shift it whenever a spacer
+     above in-flow rows resizes (the converted side), and chase the virtualizer to the end. */
+  overflow-anchor: none;
   color: oklch(14.5% 0 0deg);
   background: white;
   border: 1px solid oklch(92.2% 0 0deg);

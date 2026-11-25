@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { Tree } from '@base-ui/react/tree';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import type { Virtualizer } from '@tanstack/react-virtual';
 import type { BenchItem } from './data';
 import { OVERSCAN, ROW_SIZE, initialRect, visibleRows } from './virtualizer';
 import styles from './bench.module.css';
@@ -44,11 +45,18 @@ export function BenchTree(props: BenchTreeProps) {
 function Level(props: { items: BenchItem[]; start: number; scrollElement: HTMLElement | null }) {
   const { items, start, scrollElement } = props;
   const getRowCount = Tree.unstable_useRowCount();
+  const virtualizerRef = React.useRef<Virtualizer<HTMLElement, Element>>(null);
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollElement,
-    // A parent's size is its own row plus its visible descendants.
-    estimateSize: (index) => ROW_SIZE * getRowCount(items[index].id),
+    // A mounted row is as tall as it currently is, which mid-animation is not its final size.
+    // Otherwise a parent's size is its own row plus its visible descendants.
+    estimateSize: (index) => {
+      const element = virtualizerRef.current?.elementsCache.get(items[index].id);
+      return element?.isConnected
+        ? element.getBoundingClientRect().height
+        : ROW_SIZE * getRowCount(items[index].id);
+    },
     getItemKey: (index) => items[index].id,
     // Where this level starts in the shared scroller.
     scrollMargin: start,
@@ -56,13 +64,29 @@ function Level(props: { items: BenchItem[]; start: number; scrollElement: HTMLEl
     initialRect: initialRect(scrollElement),
     overscan: OVERSCAN,
   });
+  virtualizerRef.current = virtualizer;
+
+  // TanStack shifts scrollTop when an item that starts above the viewport changes size. A parent
+  // that contains the viewport changes size below the fold, so only compensate items that are
+  // entirely above it; otherwise collapsing a group drags the rows on screen with it.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
+    item.end <= (instance.scrollOffset ?? 0);
 
   // Expanding or collapsing changes the size of parents that aren't mounted to be measured.
   React.useEffect(() => virtualizer.measure(), [virtualizer, getRowCount]);
 
+  const rows = visibleRows(virtualizer);
+  const end = start + virtualizer.getTotalSize();
+  // Rows stay in normal flow between two spacers, rather than absolutely positioned, so the rows
+  // after an animating group follow its height on every frame instead of jumping to the
+  // virtualizer's final offsets.
+  const before = rows.length > 0 ? rows[0].start - start : 0;
+  const after = rows.length > 0 ? end - rows[rows.length - 1].end : end - start;
+
   return (
-    <div className={styles.Level} style={{ height: virtualizer.getTotalSize() }}>
-      {visibleRows(virtualizer).map((row) => {
+    <div className={styles.Level}>
+      <div style={{ height: before }} />
+      {rows.map((row) => {
         const item = items[row.index];
         return (
           <Tree.Item
@@ -71,13 +95,6 @@ function Level(props: { items: BenchItem[]; start: number; scrollElement: HTMLEl
             ref={virtualizer.measureElement}
             data-index={row.index}
             className={item.children ? undefined : styles.Row}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              transform: `translateY(${row.start - start}px)`,
-            }}
           >
             {item.children ? (
               <React.Fragment>
@@ -98,6 +115,7 @@ function Level(props: { items: BenchItem[]; start: number; scrollElement: HTMLEl
           </Tree.Item>
         );
       })}
+      <div style={{ height: after }} />
     </div>
   );
 }
