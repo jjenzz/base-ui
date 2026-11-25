@@ -7,7 +7,7 @@ import { OVERSCAN, ROW_SIZE, initialRect, visibleRows } from './virtualizer';
 import styles from './bench.module.css';
 
 export const implementationLabel =
-  "Baseline: Flavien's Tree (flat rows, Tree.ItemIndentGuide, Tree.GroupTransition), TanStack Virtual";
+  'Converted: nested Tree.Group and Tree.GroupLabel, guides from group borders, TanStack Virtual per level';
 
 export interface BenchTreeProps {
   items: BenchItem[];
@@ -16,9 +16,8 @@ export interface BenchTreeProps {
 }
 
 /**
- * Flavien's Tree as it is, virtualized with one TanStack virtualizer over the visible rows.
- * Root, items and grouping only, plus the two parts the proposal replaces:
- * `Tree.ItemIndentGuide` on every row and `Tree.GroupTransition` after it.
+ * Flavien's Tree converted to nested groups, virtualized with one TanStack virtualizer per expanded
+ * level, all sharing the list as their scroll element. Root, items, groups and group labels only.
  */
 export function BenchTree(props: BenchTreeProps) {
   const { items, expanded, onExpandedChange } = props;
@@ -36,46 +35,69 @@ export function BenchTree(props: BenchTreeProps) {
         className={styles.Tree}
         data-bench-scroller=""
       >
-        <VirtualRows scrollElement={scrollElement} />
+        <Level items={items} start={0} scrollElement={scrollElement} />
       </Tree.List>
     </Tree.Root>
   );
 }
 
-function VirtualRows({ scrollElement }: { scrollElement: HTMLElement | null }) {
-  const rowIds = Tree.unstable_useRowIds();
+function Level(props: { items: BenchItem[]; start: number; scrollElement: HTMLElement | null }) {
+  const { items, start, scrollElement } = props;
+  const getRowCount = Tree.unstable_useRowCount();
   const virtualizer = useVirtualizer({
-    count: rowIds.length,
+    count: items.length,
     getScrollElement: () => scrollElement,
-    estimateSize: () => ROW_SIZE,
-    getItemKey: (index) => rowIds[index],
+    // A parent's size is its own row plus its visible descendants.
+    estimateSize: (index) => ROW_SIZE * getRowCount(items[index].id),
+    getItemKey: (index) => items[index].id,
+    // Where this level starts in the shared scroller.
+    scrollMargin: start,
     initialOffset: () => scrollElement?.scrollTop ?? 0,
     initialRect: initialRect(scrollElement),
     overscan: OVERSCAN,
   });
+
+  // Expanding or collapsing changes the size of parents that aren't mounted to be measured.
+  React.useEffect(() => virtualizer.measure(), [virtualizer, getRowCount]);
+
   return (
     <div className={styles.Level} style={{ height: virtualizer.getTotalSize() }}>
-      {visibleRows(virtualizer).map((row) => (
-        <div
-          key={row.key}
-          ref={virtualizer.measureElement}
-          data-index={row.index}
-          className={styles.Virtual}
-          style={{ transform: `translateY(${row.start}px)` }}
-        >
-          <Tree.unstable_Row itemId={rowIds[row.index]}>
-            {(item: BenchItem) => (
+      {visibleRows(virtualizer).map((row) => {
+        const item = items[row.index];
+        return (
+          <Tree.Item
+            key={row.key}
+            itemId={item.id}
+            ref={virtualizer.measureElement}
+            data-index={row.index}
+            className={item.children ? undefined : styles.Row}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${row.start - start}px)`,
+            }}
+          >
+            {item.children ? (
               <React.Fragment>
-                <Tree.Item itemId={item.id} className={styles.FlatRow}>
-                  <Tree.ItemIndentGuide className={styles.IndentGuide} />
+                <Tree.GroupLabel className={styles.Row}>
                   <span className={styles.Label}>{item.label}</span>
-                </Tree.Item>
-                <Tree.GroupTransition className={styles.GroupTransition} />
+                </Tree.GroupLabel>
+                <Tree.Group className={styles.Group}>
+                  <Level
+                    items={item.children}
+                    start={row.start + ROW_SIZE}
+                    scrollElement={scrollElement}
+                  />
+                </Tree.Group>
               </React.Fragment>
+            ) : (
+              <span className={styles.Label}>{item.label}</span>
             )}
-          </Tree.unstable_Row>
-        </div>
-      ))}
+          </Tree.Item>
+        );
+      })}
     </div>
   );
 }

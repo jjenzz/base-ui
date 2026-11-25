@@ -21,7 +21,9 @@ function nextPaint() {
 }
 
 export default function TreeBenchmark() {
-  const [params, setParams] = React.useState<{ dataset: DatasetName } | null>(null);
+  const [params, setParams] = React.useState<{ dataset: DatasetName; animate: boolean } | null>(
+    null,
+  );
   const [mounted, setMounted] = React.useState(false);
   const [expanded, setExpanded] = React.useState<string[]>([]);
   const [last, setLast] = React.useState<string>('');
@@ -29,7 +31,7 @@ export default function TreeBenchmark() {
   React.useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const dataset = (search.get('dataset') ?? 'large') as DatasetName;
-    setParams({ dataset });
+    setParams({ dataset, animate: search.get('animate') === '1' });
   }, []);
 
   const data = React.useMemo(() => {
@@ -121,7 +123,10 @@ export default function TreeBenchmark() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+      data-animate={params.animate ? '' : undefined}
+    >
       <div style={{ fontSize: 13 }}>
         <strong>{implementationLabel}</strong>
         <br />

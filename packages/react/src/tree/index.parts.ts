@@ -7,12 +7,12 @@ export { TreeLinkItem as LinkItem } from './link-item/TreeLinkItem';
 export { TreeItemExpansionTrigger as ItemExpansionTrigger } from './item-expansion-trigger/TreeItemExpansionTrigger';
 export { TreeItemGroupIndicator as ItemGroupIndicator } from './item-group-indicator/TreeItemGroupIndicator';
 export { TreeList as List } from './list/TreeList';
-// Benchmark-only, for virtualizing the flat list with TanStack Virtual.
-export { useTreeRowIds as unstable_useRowIds, TreeRow as unstable_Row } from './list/TreeRows';
-export { TreeGroupTransition as GroupTransition } from './group-transition/TreeGroupTransition';
+export { TreeGroup as Group } from './group/TreeGroup';
+export { TreeGroupLabel as GroupLabel } from './group-label/TreeGroupLabel';
+// Sizes nested groups for an external virtualizer.
+export { useTreeRowCount as unstable_useRowCount } from './utils/useTreeRowCount';
 export { TreeEmpty as Empty } from './empty/TreeEmpty';
 export { TreeStatus as Status } from './status/TreeStatus';
-export { TreeItemIndentGuide as ItemIndentGuide } from './item-indent-guide/TreeItemIndentGuide';
 
 // Filtering. The provider is the only part that bundles the filter implementation.
 export { TreeFilterProvider as FilterProvider } from './filter-provider/TreeFilterProvider';

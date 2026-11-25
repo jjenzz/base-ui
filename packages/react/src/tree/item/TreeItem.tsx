@@ -9,7 +9,7 @@ import { useTreeRootContext } from '../root/TreeRootContext';
 import { TreeItemContext } from './TreeItemContext';
 import { useTreeItem } from '../utils/useTreeItem';
 import type { TreeItemBaseState } from '../utils/useTreeItem';
-import { itemMapping } from '../utils/stateAttributesMapping';
+import { expansionMapping, itemMapping } from '../utils/stateAttributesMapping';
 
 /**
  * An individual item in a hierarchical collection, and a row in a tree grid. Clicking it selects it and deselects other items.
@@ -21,8 +21,45 @@ export const TreeItem = fastComponentRef(function TreeItem(
   componentProps: TreeItem.Props,
   forwardedRef: React.ForwardedRef<HTMLDivElement>,
 ) {
-  const { className, render, style, itemId, ...elementProps } = componentProps;
+  const { itemId } = componentProps;
+  const store = useTreeRootContext();
+  // A parent node in a plain tree is a wrapper around its `Tree.GroupLabel` (the row) and its
+  // `Tree.Group` (the children). The store knows which items are parents, so this is right on the
+  // first render and on the server. Tree grid rows stay flat.
+  const isParentWrapper = store.useState('isItemExpandable', itemId) && store.grid == null;
+  if (isParentWrapper) {
+    return <TreeParentItem componentProps={componentProps} forwardedRef={forwardedRef} />;
+  }
+  return <TreeItemRow componentProps={componentProps} forwardedRef={forwardedRef} />;
+});
 
+function TreeParentItem(props: {
+  componentProps: TreeItem.Props;
+  forwardedRef: React.ForwardedRef<HTMLDivElement>;
+}) {
+  const { componentProps, forwardedRef } = props;
+  const { className, render, style, itemId, ...elementProps } = componentProps;
+  const store = useTreeRootContext();
+  const expanded = store.useState('isItemExpanded', itemId);
+  const element = useRenderElement<{ expanded: boolean }, HTMLDivElement, 'div'>(
+    'div',
+    componentProps as any,
+    {
+      state: { expanded },
+      ref: forwardedRef,
+      props: [elementProps],
+      stateAttributesMapping: expansionMapping,
+    },
+  );
+  return <TreeItemContext.Provider value={itemId}>{element}</TreeItemContext.Provider>;
+}
+
+function TreeItemRow(props: {
+  componentProps: TreeItem.Props;
+  forwardedRef: React.ForwardedRef<HTMLDivElement>;
+}) {
+  const { componentProps, forwardedRef } = props;
+  const { className, render, style, itemId, ...elementProps } = componentProps;
   const store = useTreeRootContext();
   const sharedItemResponse = useTreeItem({ store, itemId });
   const { selected, selectionSupported } = sharedItemResponse;
@@ -45,7 +82,7 @@ export const TreeItem = fastComponentRef(function TreeItem(
   });
 
   return <TreeItemContext.Provider value={itemId}>{element}</TreeItemContext.Provider>;
-});
+}
 
 export interface TreeItemState extends TreeItemBaseState {
   /**
