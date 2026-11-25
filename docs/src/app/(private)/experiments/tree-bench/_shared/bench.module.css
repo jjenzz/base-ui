@@ -1,0 +1,104 @@
+/* Shared by both benchmarked Trees: same scroller, same 28px rows, same guide colour */
+.Tree {
+  box-sizing: border-box;
+  width: 22rem;
+  height: 24rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: oklch(14.5% 0 0deg);
+  background: white;
+  border: 1px solid oklch(92.2% 0 0deg);
+  outline: none;
+  font-size: 0.875rem;
+}
+
+.Level {
+  position: relative;
+  width: 100%;
+}
+
+.Virtual {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.Row,
+.FlatRow {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+  outline: none;
+
+  &[data-selected] {
+    background: oklch(92.2% 0 0deg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid oklch(14.5% 0 0deg);
+    outline-offset: -2px;
+  }
+}
+
+/* Baseline: indentation from the level variable */
+.FlatRow {
+  padding-inline-start: calc(0.5rem + 0.75rem * (var(--tree-item-level) - 1));
+}
+
+/* Baseline: one span per ancestor from Tree.ItemIndentGuide, hidden once the ancestor is last */
+.IndentGuide {
+  display: contents;
+
+  & > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(0.25rem + 0.75rem * (var(--tree-indent-guide-level) - 1));
+    width: 1px;
+    pointer-events: none;
+    background: oklch(87% 0 0deg);
+  }
+}
+
+/* Baseline: Tree.GroupTransition, which wraps a group only while it animates */
+.GroupTransition {
+  overflow: hidden;
+  height: var(--tree-group-transition-height);
+  transition: height 150ms ease-out;
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    height: 0;
+  }
+}
+
+/* Converted: the guide is the nested group's own border */
+.Group {
+  margin-inline-start: 0.75rem;
+  border-inline-start: 1px solid oklch(87% 0 0deg);
+}
+
+/* Converted: groups animate with ordinary CSS on the group element */
+.AnimatedGroup {
+  overflow: hidden;
+  height: var(--tree-group-height);
+  transition: height 150ms ease-out;
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    height: 0;
+  }
+}
+
+.Label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

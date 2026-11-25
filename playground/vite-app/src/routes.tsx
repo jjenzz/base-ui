@@ -1,4 +1,5 @@
 import type * as React from 'react';
+import TreeBenchmark from 'docs/src/app/(private)/experiments/tree-bench/benchmark';
 import ContainedTriggers from './experiments/perf/contained-triggers';
 import DetachedTriggers from './experiments/perf/detached-triggers';
 import RadixTriggers from './experiments/perf/radix-triggers';
@@ -45,6 +46,14 @@ export const routes: RouteEntry[] = [
     path: '/perf/radix-triggers',
     label: 'Radix triggers',
     element: <RadixTriggers />,
+    showInNav: true,
+  },
+  { type: 'header', label: 'Tree DX review' },
+  {
+    type: 'route',
+    path: '/tree-bench',
+    label: 'Tree benchmark',
+    element: <TreeBenchmark />,
     showInNav: true,
   },
 ];
