@@ -1,0 +1,81 @@
+.Wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.Toolbar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* The list is the one scroll element every level's virtualizer shares */
+.Tree {
+  box-sizing: border-box;
+  width: 20rem;
+  height: 24rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: oklch(14.5% 0 0deg);
+  background: white;
+  border: 1px solid oklch(92.2% 0 0deg);
+  outline: none;
+}
+
+.Level {
+  position: relative;
+  width: 100%;
+}
+
+/* The row: Tree.Trigger for a folder, Tree.Item for a file */
+.Row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 28px;
+  padding-inline: 0.25rem 0.5rem;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  outline: none;
+
+  @media (hover: hover) {
+    &:hover {
+      background: oklch(97% 0 0deg);
+    }
+  }
+
+  &[data-selected] {
+    background: oklch(92.2% 0 0deg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid oklch(14.5% 0 0deg);
+    outline-offset: -2px;
+  }
+}
+
+/* Lines up a file's name with a folder's name, past the chevron */
+.File {
+  padding-inline-start: 1.5rem;
+}
+
+.Chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: oklch(55.6% 0 0deg);
+  transition: rotate 100ms;
+
+  &[data-expanded] {
+    rotate: 90deg;
+  }
+}
+
+/* The indent guide: a group's border runs beside its children and stops after the last one */
+.Group {
+  margin-inline-start: 0.75rem;
+  border-inline-start: 1px solid oklch(87% 0 0deg);
+}

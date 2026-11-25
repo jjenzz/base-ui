@@ -34,5 +34,5 @@
     { "path": "../../packages/utils/tsconfig.build.json" },
     { "path": "../../packages/react/tsconfig.build.json" }
   ],
-  "include": ["src"]
+  "include": ["src", "../../docs/src/app/(private)/experiments/tree-nested"]
 }
