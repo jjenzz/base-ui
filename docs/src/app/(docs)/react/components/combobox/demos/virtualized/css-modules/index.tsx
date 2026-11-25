@@ -30,10 +30,10 @@ export default function ExampleVirtualizedCombobox() {
         }
       }}
     >
-      <label className={styles.Label}>
+      <Combobox.Label className={styles.Label}>
         Search 10,000 items
         <Combobox.Input className={styles.Input} />
-      </label>
+      </Combobox.Label>
 
       <Combobox.Portal>
         <Combobox.Positioner className={styles.Positioner} sideOffset={4}>

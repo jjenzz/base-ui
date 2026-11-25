@@ -13424,30 +13424,6 @@ describe('<Combobox.Root />', () => {
       );
     });
 
-    it('Combobox.Label does not label Combobox.Input and warns when input is the form control', async () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      await render(
-        <Combobox.Root>
-          <Combobox.Label data-testid="label" />
-          <Combobox.Input data-testid="input" />
-          <Combobox.Portal>
-            <Combobox.Positioner />
-          </Combobox.Portal>
-        </Combobox.Root>,
-      );
-
-      await waitFor(() => {
-        expect(errorSpy.mock.calls.length).toBe(1);
-      });
-
-      expect(errorSpy.mock.calls[0][0]).toContain(
-        'Base UI: <Combobox.Label> labels <Combobox.Trigger> only.',
-      );
-      expect(screen.getByTestId('input')).not.toHaveAttribute('aria-labelledby');
-      errorSpy.mockRestore();
-    });
-
     it('does not set fallback aria-labelledby when no label is rendered', async () => {
       await render(
         <Combobox.Root>

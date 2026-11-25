@@ -824,8 +824,8 @@ type ComboboxSeparatorState = {
 
 ### Label
 
-An accessible label that is automatically associated with the combobox trigger.
-Renders a `<div>` element.
+An accessible label that is automatically associated with the combobox input.
+Renders a `<label>` element.
 
 **Label Props:**
 

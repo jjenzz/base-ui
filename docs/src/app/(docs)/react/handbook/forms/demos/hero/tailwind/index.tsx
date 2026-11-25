@@ -45,7 +45,7 @@ function ExampleForm() {
       <Field.Root name="region">
         <Combobox.Root items={REGIONS} required>
           <div className="relative text-sm leading-5 font-bold text-neutral-950 dark:text-white">
-            <Field.Label className="mb-1 block">Region</Field.Label>
+            <Combobox.Label className="mb-1 block">Region</Combobox.Label>
             <Combobox.InputGroup>
               <Combobox.Input placeholder="e.g. eu-central-1" />
               <div className="absolute right-0 bottom-0 inline-flex h-full items-center justify-center text-neutral-500 dark:text-neutral-400">

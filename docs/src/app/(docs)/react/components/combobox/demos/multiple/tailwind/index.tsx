@@ -3,17 +3,12 @@ import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 
 export default function ExampleMultipleCombobox() {
-  const id = React.useId();
-
   return (
     <Combobox.Root items={langs} multiple>
       <div className="max-w-md flex flex-col gap-1">
-        <label
-          className="flex flex-col gap-1 text-sm leading-5 font-bold text-neutral-950 dark:text-white"
-          htmlFor={id}
-        >
+        <Combobox.Label className="flex flex-col gap-1 text-sm leading-5 font-bold text-neutral-950 dark:text-white">
           Programming languages
-        </label>
+        </Combobox.Label>
         <Combobox.InputGroup className="flex min-h-8 w-64 cursor-text flex-wrap items-center gap-0.5 border border-neutral-950 bg-white dark:bg-neutral-950 px-2 py-1 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-neutral-950 dark:focus-within:outline-white has-[button]:px-1 dark:border-white min-[32rem]:w-[22rem]">
           <Combobox.Value>
             {(value: ProgrammingLanguage[]) => (
@@ -38,7 +33,6 @@ export default function ExampleMultipleCombobox() {
                   </Combobox.Chip>
                 ))}
                 <Combobox.Input
-                  id={id}
                   placeholder={value.length > 0 ? '' : 'e.g. TypeScript'}
                   aria-description={
                     value.length > 0

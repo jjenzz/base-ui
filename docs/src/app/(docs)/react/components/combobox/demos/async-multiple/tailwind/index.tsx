@@ -3,8 +3,6 @@ import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 
 export default function ExampleAsyncMultipleCombobox() {
-  const id = React.useId();
-
   const [searchResults, setSearchResults] = React.useState<DirectoryUser[]>([]);
   const [selectedValues, setSelectedValues] = React.useState<DirectoryUser[]>([]);
   const [searchValue, setSearchValue] = React.useState('');
@@ -136,12 +134,9 @@ export default function ExampleAsyncMultipleCombobox() {
       }}
     >
       <div className="max-w-md flex flex-col gap-1">
-        <label
-          className="flex flex-col gap-1 text-sm leading-5 font-bold text-neutral-950 dark:text-white"
-          htmlFor={id}
-        >
+        <Combobox.Label className="flex flex-col gap-1 text-sm leading-5 font-bold text-neutral-950 dark:text-white">
           Assign reviewers
-        </label>
+        </Combobox.Label>
         <Combobox.InputGroup className="flex min-h-8 w-64 cursor-text flex-wrap items-center gap-0.5 border border-neutral-950 bg-white dark:bg-neutral-950 px-2 py-1 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-neutral-950 dark:focus-within:outline-white has-[button]:px-1 dark:border-white min-[32rem]:w-[22rem]">
           <Combobox.Value>
             {(value: DirectoryUser[]) => (
@@ -166,7 +161,6 @@ export default function ExampleAsyncMultipleCombobox() {
                   </Combobox.Chip>
                 ))}
                 <Combobox.Input
-                  id={id}
                   placeholder={value.length > 0 ? '' : 'e.g. Michael'}
                   aria-description={
                     value.length > 0

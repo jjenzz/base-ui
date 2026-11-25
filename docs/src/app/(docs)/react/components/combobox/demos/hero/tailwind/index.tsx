@@ -3,15 +3,13 @@ import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 
 export default function ExampleCombobox() {
-  const id = React.useId();
   return (
     <Combobox.Root items={fruits}>
       <div className="relative flex flex-col gap-1 text-sm leading-5 font-bold text-neutral-950 dark:text-white">
-        <label htmlFor={id}>Choose a fruit</label>
+        <Combobox.Label>Choose a fruit</Combobox.Label>
         <Combobox.InputGroup className="relative h-8 w-56 border border-neutral-950 bg-white dark:bg-neutral-950 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-neutral-950 dark:focus-within:outline-white dark:border-white [&>input]:pr-[calc(0.5rem+2rem)] has-[.combobox-clear]:[&>input]:pr-[calc(0.5rem+2rem*2)]">
           <Combobox.Input
             placeholder="e.g. Apple"
-            id={id}
             className="h-full w-full border-0 bg-white pl-2 dark:bg-neutral-950 text-sm any-pointer-coarse:text-base font-normal text-neutral-950 outline-none placeholder:text-neutral-500 dark:placeholder:text-neutral-400 dark:text-white"
           />
           <div className="absolute right-0 bottom-0 flex h-full items-center justify-center text-neutral-500 dark:text-neutral-400">

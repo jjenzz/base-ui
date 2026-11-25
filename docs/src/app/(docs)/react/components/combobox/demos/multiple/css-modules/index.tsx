@@ -4,14 +4,10 @@ import { Combobox } from '@base-ui/react/combobox';
 import styles from './index.module.css';
 
 export default function ExampleMultipleCombobox() {
-  const id = React.useId();
-
   return (
     <Combobox.Root items={langs} multiple>
       <div className={styles.Container}>
-        <label className={styles.Label} htmlFor={id}>
-          Programming languages
-        </label>
+        <Combobox.Label className={styles.Label}>Programming languages</Combobox.Label>
         <Combobox.InputGroup className={styles.InputGroup}>
           <Combobox.Value>
             {(value: ProgrammingLanguage[]) => (
@@ -36,7 +32,6 @@ export default function ExampleMultipleCombobox() {
                   </Combobox.Chip>
                 ))}
                 <Combobox.Input
-                  id={id}
                   placeholder={value.length > 0 ? '' : 'e.g. TypeScript'}
                   aria-description={
                     value.length > 0

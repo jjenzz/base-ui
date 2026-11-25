@@ -84,7 +84,12 @@ export const ComboboxTrigger = React.forwardRef(function ComboboxTrigger(
 
   useLabelableId({ id: inputInsidePopup ? idProp : undefined });
   const id = inputInsidePopup ? (idProp ?? rootId) : idProp;
-  const ariaLabelledBy = resolveAriaLabelledBy(fieldLabelId, comboboxLabelId);
+  // `Combobox.Label` labels the input when it's the form control, which keeps the trigger's own
+  // name, such as "Open popup".
+  const ariaLabelledBy = resolveAriaLabelledBy(
+    fieldLabelId,
+    inputInsidePopup ? comboboxLabelId : undefined,
+  );
 
   let ariaControls: string | undefined;
 

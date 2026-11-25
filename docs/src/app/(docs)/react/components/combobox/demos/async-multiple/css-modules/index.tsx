@@ -4,8 +4,6 @@ import { Combobox } from '@base-ui/react/combobox';
 import styles from './index.module.css';
 
 export default function ExampleAsyncMultipleCombobox() {
-  const id = React.useId();
-
   const [searchResults, setSearchResults] = React.useState<DirectoryUser[]>([]);
   const [selectedValues, setSelectedValues] = React.useState<DirectoryUser[]>([]);
   const [searchValue, setSearchValue] = React.useState('');
@@ -134,9 +132,7 @@ export default function ExampleAsyncMultipleCombobox() {
       }}
     >
       <div className={styles.Container}>
-        <label className={styles.Label} htmlFor={id}>
-          Assign reviewers
-        </label>
+        <Combobox.Label className={styles.Label}>Assign reviewers</Combobox.Label>
         <Combobox.InputGroup className={styles.InputGroup}>
           <Combobox.Value>
             {(value: DirectoryUser[]) => (
@@ -161,7 +157,6 @@ export default function ExampleAsyncMultipleCombobox() {
                   </Combobox.Chip>
                 ))}
                 <Combobox.Input
-                  id={id}
                   placeholder={value.length > 0 ? '' : 'e.g. Michael'}
                   aria-description={
                     value.length > 0

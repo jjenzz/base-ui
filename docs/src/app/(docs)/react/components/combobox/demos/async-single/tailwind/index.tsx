@@ -3,8 +3,6 @@ import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 
 export default function ExampleAsyncSingleCombobox() {
-  const id = React.useId();
-
   const [searchResults, setSearchResults] = React.useState<DirectoryUser[]>([]);
   const [selectedValue, setSelectedValue] = React.useState<DirectoryUser | null>(null);
   const [searchValue, setSearchValue] = React.useState('');
@@ -113,10 +111,9 @@ export default function ExampleAsyncSingleCombobox() {
       }}
     >
       <div className="relative flex flex-col gap-1 text-sm leading-5 font-bold text-neutral-950 dark:text-white">
-        <label htmlFor={id}>Assign reviewer</label>
+        <Combobox.Label>Assign reviewer</Combobox.Label>
         <Combobox.InputGroup className="relative h-8 w-64 border border-neutral-950 bg-white dark:bg-neutral-950 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-neutral-950 dark:focus-within:outline-white dark:border-white md:w-80 [&>input]:pr-[calc(0.5rem+2rem)] has-[.combobox-clear]:[&>input]:pr-[calc(0.5rem+2rem*2)]">
           <Combobox.Input
-            id={id}
             placeholder="e.g. Michael"
             className="h-full w-full border-0 bg-white pl-2 dark:bg-neutral-950 text-sm any-pointer-coarse:text-base font-normal text-neutral-950 outline-none placeholder:text-neutral-500 dark:placeholder:text-neutral-400 dark:text-white"
           />

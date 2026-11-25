@@ -4,8 +4,6 @@ import { Combobox } from '@base-ui/react/combobox';
 import styles from './index.module.css';
 
 export default function ExampleAsyncSingleCombobox() {
-  const id = React.useId();
-
   const [searchResults, setSearchResults] = React.useState<DirectoryUser[]>([]);
   const [selectedValue, setSelectedValue] = React.useState<DirectoryUser | null>(null);
   const [searchValue, setSearchValue] = React.useState('');
@@ -112,9 +110,9 @@ export default function ExampleAsyncSingleCombobox() {
       }}
     >
       <div className={styles.Label}>
-        <label htmlFor={id}>Assign reviewer</label>
+        <Combobox.Label>Assign reviewer</Combobox.Label>
         <Combobox.InputGroup className={styles.InputGroup}>
-          <Combobox.Input id={id} placeholder="e.g. Michael" className={styles.Input} />
+          <Combobox.Input placeholder="e.g. Michael" className={styles.Input} />
           <div className={styles.ActionButtons}>
             <Combobox.Clear className={styles.Clear} aria-label="Clear selection">
               <XIcon />

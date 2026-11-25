@@ -4,13 +4,12 @@ import { Combobox } from '@base-ui/react/combobox';
 import styles from './index.module.css';
 
 export default function ExampleCombobox() {
-  const id = React.useId();
   return (
     <Combobox.Root items={fruits}>
       <div className={styles.Label}>
-        <label htmlFor={id}>Choose a fruit</label>
+        <Combobox.Label>Choose a fruit</Combobox.Label>
         <Combobox.InputGroup className={styles.InputGroup}>
-          <Combobox.Input placeholder="e.g. Apple" id={id} className={styles.Input} />
+          <Combobox.Input placeholder="e.g. Apple" className={styles.Input} />
           <div className={styles.ActionButtons}>
             <Combobox.Clear className={styles.Clear} aria-label="Clear selection">
               <XIcon />
