@@ -5,8 +5,8 @@ import { useIsoLayoutEffect } from '@base-ui/utils/useIsoLayoutEffect';
 import { platform } from '@base-ui/utils/platform';
 import type { BaseUIComponentProps } from '../../internals/types';
 import { useBaseUiId } from '../../internals/useBaseUiId';
-import { useRenderedId } from '../../internals/resolveRenderedId';
 import { useRenderElement } from '../../internals/useRenderElement';
+import { useRenderedId } from '../../internals/resolveRenderedId';
 import { useComboboxInputValueContext, useComboboxRootContext } from '../root/ComboboxRootContext';
 import { triggerStateAttributesMapping } from '../utils/stateAttributesMapping';
 import type { FieldRootState } from '../../field/root/FieldRoot';
@@ -96,11 +96,12 @@ export const ComboboxInput = React.forwardRef(function ComboboxInput(
   const isInsidePopup = hasPositionerParent || inline;
   const focusManagerModal = !isInsidePopup || modal;
   const defaultId = useBaseUiId(!isInsidePopup ? rootId : undefined);
-  const setRenderedInputId = useStableCallback((nextId: string | undefined) => {
-    store.set('renderedInputId', nextId);
-  });
-  // Publishes a custom id, including one on the render element, so a label can follow it.
-  const [id, registerIdRef] = useRenderedId({ id: idProp, render }, defaultId, setRenderedInputId);
+  // Publishes an id set on the render element so `Combobox.Label` points `htmlFor` at it.
+  const [id, registerIdRef] = useRenderedId(
+    { id: idProp, render },
+    defaultId,
+    store.useStateSetter('renderedInputId'),
+  );
   const fieldStateForInput = hasPositionerParent ? DEFAULT_FIELD_STATE_ATTRIBUTES : fieldState;
 
   const [composingValue, setComposingValue] = React.useState<string | null>(null);

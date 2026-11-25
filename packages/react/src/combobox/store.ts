@@ -35,7 +35,8 @@ export type State = ValuePopupState & {
   popupElementId: string | undefined;
   inputElement: HTMLInputElement | null;
   /**
-   * The id the input renders with when it differs from its default, such as a custom `id`.
+   * The id `Combobox.Input` renders with when it differs from its default, such as one set on its
+   * render element.
    */
   renderedInputId: string | undefined;
   inputGroupElement: HTMLDivElement | null;
