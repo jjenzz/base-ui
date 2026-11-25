@@ -1,6 +1,7 @@
 export * as Autocomplete from './index.parts';
 
 export type * from './root/AutocompleteRoot';
+export type * from './label/AutocompleteLabel';
 export type * from './trigger/AutocompleteTrigger';
 export type * from './input-group/AutocompleteInputGroup';
 export type * from './item/AutocompleteItem';

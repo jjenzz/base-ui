@@ -1,4 +1,5 @@
 export { AutocompleteRoot as Root } from './root/AutocompleteRoot';
+export { AutocompleteLabel as Label } from './label/AutocompleteLabel';
 export { AutocompleteValue as Value } from './value/AutocompleteValue';
 export { AutocompleteTrigger as Trigger } from './trigger/AutocompleteTrigger';
 export { ComboboxInput as Input } from '../combobox/input/ComboboxInput';

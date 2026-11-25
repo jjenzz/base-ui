@@ -31,10 +31,10 @@ export default function ExampleVirtualizedAutocomplete() {
         }
       }}
     >
-      <label className={styles.Label}>
-        Search 10,000 items
+      <div className={styles.Field}>
+        <Autocomplete.Label className={styles.Label}>Search 10,000 items</Autocomplete.Label>
         <Autocomplete.Input className={styles.Input} />
-      </label>
+      </div>
 
       <Autocomplete.Portal>
         <Autocomplete.Positioner className={styles.Positioner} sideOffset={4}>

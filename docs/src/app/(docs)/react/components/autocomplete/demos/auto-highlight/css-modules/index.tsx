@@ -5,10 +5,10 @@ import styles from './index.module.css';
 export default function ExampleAutocompleteAutoHighlight() {
   return (
     <Autocomplete.Root items={tags} autoHighlight>
-      <label className={styles.Label}>
-        Auto highlight on type
+      <div className={styles.Field}>
+        <Autocomplete.Label className={styles.Label}>Auto highlight on type</Autocomplete.Label>
         <Autocomplete.Input placeholder="e.g. feature" className={styles.Input} />
-      </label>
+      </div>
 
       <Autocomplete.Portal>
         <Autocomplete.Positioner className={styles.Positioner} sideOffset={4}>

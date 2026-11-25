@@ -13,7 +13,7 @@ import { DemoAutocompleteHero } from './demos/hero';
 ## Usage guidelines
 
 - **Avoid when selection state is needed**: Use [Combobox](/react/components/combobox) instead of Autocomplete if the selection should be remembered and the input value cannot be custom. Unlike Combobox, Autocomplete's input can contain free-form text, as its suggestions only _optionally_ autocomplete the text.
-- **Form controls must have an accessible name**: It can be created using a `<label>` element or the `Field` component. See the [forms guide](/react/handbook/forms).
+- **Form controls must have an accessible name**: Label `<Autocomplete.Input>` with `<Autocomplete.Label>` or `<Field.Label>`, or provide an `aria-label` when no visible label is rendered. See the [forms guide](/react/handbook/forms).
 - **Closing animations**: The popup stays rendered until its closing animation finishes. See [JavaScript animations](/react/handbook/animation#javascript-animations) for animating it with Motion and for manual control.
 
 ## Anatomy
@@ -24,6 +24,7 @@ Import the components and place them together:
 import { Autocomplete } from '@base-ui/react/autocomplete';
 
 <Autocomplete.Root>
+  <Autocomplete.Label />
   <Autocomplete.InputGroup>
     <Autocomplete.Input />
     <Autocomplete.Trigger />
@@ -179,6 +180,10 @@ import { TypesAutocomplete } from './types';
 ### Root
 
 <TypesAutocomplete.Root />
+
+### Label
+
+<TypesAutocomplete.Label />
 
 ### Value
 

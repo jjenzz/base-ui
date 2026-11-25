@@ -75,10 +75,12 @@ export default function ExampleAsyncAutocomplete() {
       itemToStringValue={(item) => item.title}
       filter={null}
     >
-      <label className={styles.Label}>
-        Search movies by name or year
+      <div className={styles.Field}>
+        <Autocomplete.Label className={styles.Label}>
+          Search movies by name or year
+        </Autocomplete.Label>
         <Autocomplete.Input placeholder="e.g. Pulp Fiction or 1994" className={styles.Input} />
-      </label>
+      </div>
 
       <Autocomplete.Portal hidden={!status}>
         <Autocomplete.Positioner className={styles.Positioner} sideOffset={4} align="start">

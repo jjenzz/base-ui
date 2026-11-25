@@ -5,10 +5,10 @@ import styles from './index.module.css';
 export default function ExampleGroupAutocomplete() {
   return (
     <Autocomplete.Root items={groupedTags}>
-      <label className={styles.Label}>
-        Select a tag
+      <div className={styles.Field}>
+        <Autocomplete.Label className={styles.Label}>Select a tag</Autocomplete.Label>
         <Autocomplete.Input placeholder="e.g. feature" className={styles.Input} />
-      </label>
+      </div>
 
       <Autocomplete.Portal>
         <Autocomplete.Positioner className={styles.Positioner} sideOffset={4}>

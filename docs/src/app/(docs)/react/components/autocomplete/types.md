@@ -797,6 +797,42 @@ type AutocompleteSeparatorState = {
 };
 ```
 
+### Label
+
+An accessible label that is automatically associated with the autocomplete input.
+Renders a `<label>` element.
+
+**Label Props:**
+
+| Prop      | Type                                                                                             | Default | Description                                                                                                                                                                                   |
+| :-------- | :----------------------------------------------------------------------------------------------- | :------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| className | `string \| ((state: Autocomplete.Label.State) => string \| undefined)`                           | -       | CSS class applied to the element, or a function that&#xA;returns a class based on the component's state.                                                                                      |
+| style     | `React.CSSProperties \| ((state: Autocomplete.Label.State) => React.CSSProperties \| undefined)` | -       | Style applied to the element, or a function that&#xA;returns a style object based on the component's state.                                                                                   |
+| render    | `ReactElement \| ((props: HTMLProps, state: Autocomplete.Label.State) => ReactElement)`          | -       | Allows you to replace the component's HTML element&#xA;with a different tag, or compose it with another component. Accepts a `ReactElement` or a function that returns the element to render. |
+
+### Label.Props
+
+Re-export of [Label](#label) props.
+
+### Label.State
+
+```typescript
+type AutocompleteLabelState = {
+  /** Whether the component should ignore user interaction. */
+  disabled: boolean;
+  /** Whether the field has been touched. */
+  touched: boolean;
+  /** Whether the field value has changed from its initial value. */
+  dirty: boolean;
+  /** Whether the field is valid. */
+  valid: boolean | null;
+  /** Whether the field has a value. */
+  filled: boolean;
+  /** Whether the field is focused. */
+  focused: boolean;
+};
+```
+
 ### Status
 
 Displays a status message whose content changes are announced politely to screen readers.
@@ -1348,6 +1384,7 @@ type Orientation = 'horizontal' | 'vertical';
 ## Export Groups
 
 - `Autocomplete.Root`: `Autocomplete.Root`, `Autocomplete.Root.Props`, `Autocomplete.Root.State`, `Autocomplete.Root.Actions`, `Autocomplete.Root.ChangeEventReason`, `Autocomplete.Root.ChangeEventDetails`, `Autocomplete.Root.OpenChangeEventDetails`, `Autocomplete.Root.HighlightEventReason`, `Autocomplete.Root.HighlightEventDetails`
+- `Autocomplete.Label`: `Autocomplete.Label`, `Autocomplete.Label.State`, `Autocomplete.Label.Props`
 - `Autocomplete.Value`: `Autocomplete.Value`, `Autocomplete.Value.State`, `Autocomplete.Value.Props`
 - `Autocomplete.Trigger`: `Autocomplete.Trigger`, `Autocomplete.Trigger.State`, `Autocomplete.Trigger.Props`
 - `Autocomplete.Input`: `Autocomplete.Input`, `Autocomplete.Input.State`, `Autocomplete.Input.Props`
@@ -1370,7 +1407,7 @@ type Orientation = 'horizontal' | 'vertical';
 - `Autocomplete.Separator`: `Autocomplete.Separator`, `Autocomplete.Separator.Props`, `Autocomplete.Separator.State`
 - `Autocomplete.useFilter`
 - `Autocomplete.useFilteredItems`
-- `Default`: `AutocompleteSeparatorProps`, `AutocompleteSeparatorState`, `AutocompleteInputProps`, `AutocompleteInputState`, `AutocompleteIconProps`, `AutocompleteIconState`, `AutocompleteClearProps`, `AutocompleteClearState`, `AutocompletePopupProps`, `AutocompletePopupState`, `AutocompletePositionerProps`, `AutocompletePositionerState`, `AutocompleteListProps`, `AutocompleteListState`, `AutocompleteRowProps`, `AutocompleteRowState`, `AutocompleteArrowProps`, `AutocompleteArrowState`, `AutocompleteBackdropProps`, `AutocompleteBackdropState`, `AutocompletePortalProps`, `AutocompletePortalState`, `AutocompleteGroupProps`, `AutocompleteGroupState`, `AutocompleteGroupLabelProps`, `AutocompleteGroupLabelState`, `AutocompleteEmptyProps`, `AutocompleteEmptyState`, `AutocompleteStatusProps`, `AutocompleteStatusState`, `AutocompleteCollectionState`, `AutocompleteCollectionProps`, `AutocompleteFilter`, `AutocompleteFilterOptions`, `AutocompleteTriggerDataAttributes`, `AutocompleteInputDataAttributes`, `AutocompleteInputGroupDataAttributes`, `AutocompleteClearDataAttributes`, `AutocompleteBackdropDataAttributes`, `AutocompletePositionerCssVariables`, `AutocompletePositionerDataAttributes`, `AutocompletePopupDataAttributes`, `AutocompleteArrowDataAttributes`, `AutocompleteItemDataAttributes`, `AutocompleteSeparatorDataAttributes`, `AutocompleteRootState`, `AutocompleteRootActions`, `AutocompleteRootChangeEventReason`, `AutocompleteRootChangeEventDetails`, `AutocompleteRootOpenChangeEventDetails`, `AutocompleteRootHighlightEventReason`, `AutocompleteRootHighlightEventDetails`, `AutocompleteRootProps`, `AutocompleteTriggerState`, `AutocompleteTriggerProps`, `AutocompleteInputGroupState`, `AutocompleteInputGroupProps`, `AutocompleteItemState`, `AutocompleteItemProps`, `AutocompleteValueState`, `AutocompleteValueProps`
+- `Default`: `AutocompleteSeparatorProps`, `AutocompleteSeparatorState`, `AutocompleteInputProps`, `AutocompleteInputState`, `AutocompleteIconProps`, `AutocompleteIconState`, `AutocompleteClearProps`, `AutocompleteClearState`, `AutocompletePopupProps`, `AutocompletePopupState`, `AutocompletePositionerProps`, `AutocompletePositionerState`, `AutocompleteListProps`, `AutocompleteListState`, `AutocompleteRowProps`, `AutocompleteRowState`, `AutocompleteArrowProps`, `AutocompleteArrowState`, `AutocompleteBackdropProps`, `AutocompleteBackdropState`, `AutocompletePortalProps`, `AutocompletePortalState`, `AutocompleteGroupProps`, `AutocompleteGroupState`, `AutocompleteGroupLabelProps`, `AutocompleteGroupLabelState`, `AutocompleteEmptyProps`, `AutocompleteEmptyState`, `AutocompleteStatusProps`, `AutocompleteStatusState`, `AutocompleteCollectionState`, `AutocompleteCollectionProps`, `AutocompleteFilter`, `AutocompleteFilterOptions`, `AutocompleteTriggerDataAttributes`, `AutocompleteInputDataAttributes`, `AutocompleteInputGroupDataAttributes`, `AutocompleteClearDataAttributes`, `AutocompleteBackdropDataAttributes`, `AutocompletePositionerCssVariables`, `AutocompletePositionerDataAttributes`, `AutocompletePopupDataAttributes`, `AutocompleteArrowDataAttributes`, `AutocompleteItemDataAttributes`, `AutocompleteSeparatorDataAttributes`, `AutocompleteRootState`, `AutocompleteRootActions`, `AutocompleteRootChangeEventReason`, `AutocompleteRootChangeEventDetails`, `AutocompleteRootOpenChangeEventDetails`, `AutocompleteRootHighlightEventReason`, `AutocompleteRootHighlightEventDetails`, `AutocompleteRootProps`, `AutocompleteLabelState`, `AutocompleteLabelProps`, `AutocompleteTriggerState`, `AutocompleteTriggerProps`, `AutocompleteInputGroupState`, `AutocompleteInputGroupProps`, `AutocompleteItemState`, `AutocompleteItemProps`, `AutocompleteValueState`, `AutocompleteValueProps`
 
 ## Canonical Types
 
@@ -1384,6 +1421,8 @@ Maps `Canonical`: `Alias` — Use Canonical when its namespace is already import
 - `Autocomplete.Root.OpenChangeEventDetails`: `AutocompleteRootOpenChangeEventDetails`
 - `Autocomplete.Root.HighlightEventReason`: `AutocompleteRootHighlightEventReason`
 - `Autocomplete.Root.HighlightEventDetails`: `AutocompleteRootHighlightEventDetails`
+- `Autocomplete.Label.State`: `AutocompleteLabelState`
+- `Autocomplete.Label.Props`: `AutocompleteLabelProps`
 - `Autocomplete.Value.State`: `AutocompleteValueState`
 - `Autocomplete.Value.Props`: `AutocompleteValueProps`
 - `Autocomplete.Trigger.State`: `AutocompleteTriggerState`

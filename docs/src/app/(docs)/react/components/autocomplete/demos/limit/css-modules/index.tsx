@@ -22,10 +22,10 @@ export default function ExampleAutocompleteLimit() {
 
   return (
     <Autocomplete.Root items={tags} value={value} onValueChange={setValue} limit={limit}>
-      <label className={styles.Label}>
-        Limit results to 8
+      <div className={styles.Field}>
+        <Autocomplete.Label className={styles.Label}>Limit results to 8</Autocomplete.Label>
         <Autocomplete.Input placeholder="e.g. component" className={styles.Input} />
-      </label>
+      </div>
 
       <Autocomplete.Portal>
         <Autocomplete.Positioner className={styles.Positioner} sideOffset={4}>

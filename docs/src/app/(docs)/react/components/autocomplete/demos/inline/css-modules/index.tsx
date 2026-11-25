@@ -5,10 +5,10 @@ import styles from './index.module.css';
 export default function ExampleAutocompleteInline() {
   return (
     <Autocomplete.Root items={tags} mode="both">
-      <label className={styles.Label}>
-        Search tags
+      <div className={styles.Field}>
+        <Autocomplete.Label className={styles.Label}>Search tags</Autocomplete.Label>
         <Autocomplete.Input placeholder="e.g. feature" className={styles.Input} />
-      </label>
+      </div>
 
       <Autocomplete.Portal>
         <Autocomplete.Positioner className={styles.Positioner} sideOffset={4}>

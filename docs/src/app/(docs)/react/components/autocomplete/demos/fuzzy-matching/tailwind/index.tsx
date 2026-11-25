@@ -10,13 +10,15 @@ export default function ExampleFuzzyMatchingAutocomplete() {
       filter={fuzzyFilter}
       itemToStringValue={(item) => item.title}
     >
-      <label className="flex flex-col gap-1 text-sm font-bold text-neutral-950 dark:text-white">
-        Fuzzy search documentation
+      <div className="flex flex-col gap-1">
+        <Autocomplete.Label className="text-sm font-bold text-neutral-950 dark:text-white">
+          Fuzzy search documentation
+        </Autocomplete.Label>
         <Autocomplete.Input
           placeholder="e.g. React"
           className="h-8 w-[16rem] border border-neutral-950 bg-white dark:bg-neutral-950 px-2 text-sm any-pointer-coarse:text-base font-normal text-neutral-950 placeholder:text-neutral-500 dark:placeholder:text-neutral-400 focus:outline-2 focus:-outline-offset-1 focus:outline-neutral-950 dark:focus:outline-white dark:border-white dark:text-white"
         />
-      </label>
+      </div>
 
       <Autocomplete.Portal>
         <Autocomplete.Positioner className="outline-hidden" sideOffset={4}>

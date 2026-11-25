@@ -11,10 +11,10 @@ export default function ExampleFuzzyMatchingAutocomplete() {
       filter={fuzzyFilter}
       itemToStringValue={(item) => item.title}
     >
-      <label className={styles.Label}>
-        Fuzzy search documentation
+      <div className={styles.Field}>
+        <Autocomplete.Label className={styles.Label}>Fuzzy search documentation</Autocomplete.Label>
         <Autocomplete.Input placeholder="e.g. React" className={styles.Input} />
-      </label>
+      </div>
 
       <Autocomplete.Portal>
         <Autocomplete.Positioner className={styles.Positioner} sideOffset={4}>
