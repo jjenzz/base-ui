@@ -21,7 +21,8 @@ export const TreeList = React.forwardRef(function TreeList<TItem = any>(
     componentProps,
     forwardedRef,
     elementProps,
-    <TreeRows>{children}</TreeRows>,
+    // Benchmark-only: plain children let an external virtualizer render the rows.
+    typeof children === 'function' ? <TreeRows>{children}</TreeRows> : children,
   );
 }) as <TItem = any>(
   props: TreeList.Props<TItem> & React.RefAttributes<HTMLDivElement>,
@@ -46,7 +47,7 @@ export interface TreeListProps<TItem = any> extends Omit<
    * The render function for each tree item.
    * Pass the item type to `Tree.List` to type the `item` parameter.
    */
-  children: (item: TItem) => React.ReactNode;
+  children: ((item: TItem) => React.ReactNode) | React.ReactNode;
 }
 
 export namespace TreeList {

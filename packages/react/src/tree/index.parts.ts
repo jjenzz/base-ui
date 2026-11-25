@@ -7,6 +7,8 @@ export { TreeLinkItem as LinkItem } from './link-item/TreeLinkItem';
 export { TreeItemExpansionTrigger as ItemExpansionTrigger } from './item-expansion-trigger/TreeItemExpansionTrigger';
 export { TreeItemGroupIndicator as ItemGroupIndicator } from './item-group-indicator/TreeItemGroupIndicator';
 export { TreeList as List } from './list/TreeList';
+// Benchmark-only, for virtualizing the flat list with TanStack Virtual.
+export { useTreeRowIds as unstable_useRowIds, TreeRow as unstable_Row } from './list/TreeRows';
 export { TreeGroupTransition as GroupTransition } from './group-transition/TreeGroupTransition';
 export { TreeEmpty as Empty } from './empty/TreeEmpty';
 export { TreeStatus as Status } from './status/TreeStatus';

@@ -78,3 +78,64 @@ export namespace TreeRows {
 function isPlainList(entries: (TreeItemId | FlatListEntry)[]): entries is TreeItemId[] {
   return entries.length === 0 || typeof entries[0] === 'string' || typeof entries[0] === 'number';
 }
+
+/**
+ * Benchmark-only (tree-nested-groups branch): the IDs of the visible rows, for
+ * rendering `Tree.List` children through an external virtualizer. Rows inside an
+ * animating group are left out; `Tree.unstable_Row` renders them inside the
+ * group's `Tree.GroupTransition`, as `TreeRows` does.
+ */
+export function useTreeRowIds(): TreeItemId[] {
+  const store = useTreeRootContext();
+  const entries = useStore(store, selectors.flatListWithGroupTransitions);
+  return React.useMemo(
+    () =>
+      isPlainList(entries)
+        ? entries
+        : entries.flatMap((entry) => (entry.type === 'item' ? [entry.itemId] : [])),
+    [entries],
+  );
+}
+
+/** Benchmark-only: one row of `useTreeRowIds`, with the context `TreeRows` gives it. */
+export function TreeRow<TItem>(props: {
+  itemId: TreeItemId;
+  children: (item: TItem) => React.ReactNode;
+}): React.JSX.Element {
+  const { itemId, children } = props;
+  const store = useTreeRootContext();
+  const group = useStore(store, (state) => {
+    const entries = selectors.flatListWithGroupTransitions(state);
+    if (isPlainList(entries)) {
+      return undefined;
+    }
+    return entries.find(
+      (entry): entry is Extract<FlatListEntry, { type: 'group-transition' }> =>
+        entry.type === 'group-transition' && entry.parentId === itemId,
+    );
+  });
+  const contextValue = React.useMemo<TreeGroupTransitionContextValue>(
+    () =>
+      group
+        ? {
+            parentId: itemId,
+            animation: group.animation,
+            children: group.childIds.map((childId) => (
+              <TreeGroupTransitionContext.Provider key={getItemIdKey(childId)} value={childId}>
+                <TreeItemModelProvider store={store} itemId={childId}>
+                  {children}
+                </TreeItemModelProvider>
+              </TreeGroupTransitionContext.Provider>
+            )),
+          }
+        : itemId,
+    [group, itemId, store, children],
+  );
+  return (
+    <TreeGroupTransitionContext.Provider value={contextValue}>
+      <TreeItemModelProvider store={store} itemId={itemId}>
+        {children}
+      </TreeItemModelProvider>
+    </TreeGroupTransitionContext.Provider>
+  );
+}
